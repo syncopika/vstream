@@ -1,0 +1,73 @@
+<html>
+
+	<head>
+		<title>vstream display</title>
+		<script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
+	</head>
+	
+	<style>
+		#main{
+			font-family: monospace;
+			text-align: center;
+			top: 5%;
+			position: relative;
+			display: block;
+		}
+		#display{
+			border: #000 solid 1px;
+		}
+	</style>
+	
+	<body>
+		<div id='main'>
+			<h3> vstream display </h3>
+			
+			<canvas id='display' width='400px' height='400px'>
+			</canvas>
+			
+			<br />
+			<br />
+			
+			<button id='toggleStream'> pause/continue </button>
+			
+		</div>
+	</body>
+
+
+	<script>
+		const socket = io();
+		let streamPaused = false;
+		
+		function toggleStream(){
+			streamPaused = !streamPaused;
+			socket.emit("toggleStream", streamPaused);
+		}
+		
+		document.getElementById("toggleStream").addEventListener("click", (evt) => {
+			console.log("toggling stream...");
+			toggleStream();
+		});
+		
+		// handle receiving facial landmark coordinate data 
+		socket.on('landmarkCoordinates', (data) => {
+			let landmark_data = JSON.parse(data);
+			let canvas = document.getElementById("display");
+			let context = canvas.getContext("2d");
+			
+			// clear the canvas 
+			context.clearRect(0, 0, 400, 400);
+			
+			// draw on the canvas 
+			landmark_data.forEach((coord) => {
+				context.fillRect(coord.x, coord.y, 2, 2);
+			});
+			
+			//console.log(landmark_data);
+			//console.log("==========================")
+		});
+		
+	</script>
+
+
+
+</html>
