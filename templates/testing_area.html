@@ -1,0 +1,152 @@
+<html>
+
+	<!-- 
+		this page is for exploring manipulating vertices of a geometry and to 
+		experiment with some ideas on how to do that given real-time facial landmark data.
+	-->
+
+	<head>
+		<title>vstream display</title>
+		<!--<script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>-->
+		<script src='https://cdnjs.cloudflare.com/ajax/libs/three.js/108/three.min.js'></script>
+		<script src='testing_stuff/GLTFLoader.js'></script>
+	</head>
+	
+	<style>
+		#main{
+			font-family: monospace;
+			text-align: center;
+			top: 5%;
+			position: relative;
+			display: block;
+		}
+		#container{
+			width: 400px;
+			height: 400px;
+			margin: 0 auto;
+			border: #000 solid 1px;
+		}
+	</style>
+	
+	<body>
+		<div id='main'>
+			<h3> vstream display </h3>
+			
+			<div id='container'>
+			</div>
+			
+			<br />
+			<br />
+			
+			<button id='nextAction'> pause/continue </button>
+			
+		</div>
+	</body>
+
+
+	<script>
+	
+		let loadedModels = [];
+		const loader = new THREE.GLTFLoader();
+	
+		function getModel(modelFilePath, name){
+			return new Promise((resolve, reject) => {
+				loader.load(
+					modelFilePath,
+					function(gltf){
+						if(gltf.animations.length > 0){
+							console.log(gltf.animations);
+						}
+						gltf.scene.traverse((child) => {
+							if(child.type === "Mesh"){			
+								let material = child.material;
+								let geometry = child.geometry;
+								
+								// https://stackoverflow.com/questions/52569738/how-to-access-single-vertices-of-mesh-loaded-with-gltfloader-in-three-js
+								console.log(geometry);
+								
+								let obj = new THREE.Mesh(geometry, material);
+								obj.scale.x = child.scale.x * 5;
+								obj.scale.y = child.scale.y * 5;
+								obj.scale.z = child.scale.z * 5;
+
+								//obj.rotateOnAxis(new THREE.Vector3(0,1,0), Math.PI);
+								//obj.rotateOnAxis(new THREE.Vector3(1,0,0), Math.PI);
+								
+								obj.name = name;
+								resolve(obj);
+							}else{
+								//console.log(child.type);
+							}
+						});
+					},
+					// called while loading is progressing
+					function(xhr){
+						console.log( (xhr.loaded / xhr.total * 100) + '% loaded' );
+					},
+					// called when loading has errors
+					function(error){
+						console.log('An error happened');
+						console.log(error);
+					}
+				);
+			});
+		}
+			
+
+		const el = document.getElementById("container");
+		const renderer = new THREE.WebGLRenderer();
+		const fov = 60;
+		const camera = new THREE.PerspectiveCamera(fov, 1.0, 0.01, 1000);
+		const scene = new THREE.Scene();
+		scene.background = new THREE.Color(0xffffff);	
+		
+		renderer.shadowMap.enabled = true;
+		renderer.setSize(400, 400);	
+		el.appendChild(renderer.domElement);
+		
+		camera.position.set(0,0,25);
+		scene.add(camera);
+
+		let pointLight = new THREE.PointLight(0xffffff, 1, 0); //new THREE.pointLight( 0xffffff );
+		pointLight.position.set(0, 2, 0);
+		pointLight.castShadow = true;
+		pointLight.shadow.mapSize.width = 512;
+		pointLight.shadow.mapSize.height = 512;
+		pointLight.shadow.camera.near = 10;
+		pointLight.shadow.camera.far = 100;
+		pointLight.shadow.camera.fov = 30;
+		scene.add(pointLight);
+
+		
+		loadedModels.push(getModel('testing_stuff/basic_avatar_idea.glb', 'avatar'));
+		Promise.all(loadedModels).then((objects) => {
+			objects.forEach((mesh) => {
+			
+				var group = new THREE.Group();
+				group.add(mesh);
+			
+				bgAxesHelper = new THREE.AxesHelper(10);
+				mesh.add(bgAxesHelper);
+			
+				//mesh.castShadow = true;
+				mesh.position.set(0,0,0);
+				group.position.set(0,5,0);
+				
+				scene.add(group);
+				
+				group.rotateOnAxis(new THREE.Vector3(0,1,0), -Math.PI/2);
+				group.rotateOnAxis(new THREE.Vector3(0,0,1), -Math.PI/2);
+				group.rotateOnAxis(new THREE.Vector3(1,0,0), Math.PI/2);
+				//camera.lookAt(mesh);
+				renderer.render(scene, camera);
+			});
+		});
+
+
+		document.getElementById('nextAction').addEventListener('click', (evt) => {			
+		});
+	
+	</script>
+	
+</html>

@@ -51,36 +51,48 @@
 		// handle receiving facial landmark coordinate data 
 		socket.on('landmarkCoordinates', (data) => {
 			let landmark_data = JSON.parse(data);
-			let canvas = document.getElementById("display");
-			let context = canvas.getContext("2d");
 			
-			// clear the canvas 
-			context.clearRect(0, 0, 400, 400);
+			if(landmark_data.length > 0){
 			
-			// draw on the canvas 
-			landmark_data.forEach((coord) => {
-				context.fillRect(coord.x, coord.y, 2, 2);
-			});
-			
-			// connect the dots
-			// fortunately, the coords should be organized so it's easy to connect the parts
-			// see: https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
-			let coordsToSkip = new Set([16, 21, 26, 35, 41, 47, 67]); // 7 regions === 7 lines to draw
-			for(let i = 0; i < landmark_data.length-1; i++){
-				// do not connect the last coord for each facial region (i.e. mouth, node, jaw, etc.) to anything
-				if(coordsToSkip.has(i)){
-					continue;
+				let canvas = document.getElementById("display");
+				let context = canvas.getContext("2d");
+				
+				// clear the canvas 
+				context.clearRect(0, 0, 400, 400);
+				
+				// draw on the canvas 
+				landmark_data.forEach((coord) => {
+					context.fillRect(coord.x, coord.y, 2, 2);
+				});
+				
+				// connect the dots
+				// fortunately, the coords should be organized so it's easy to connect the parts
+				// see: https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
+				let coordsToSkip = new Set([16, 21, 26, 35, 41, 47, 67]); // 7 regions === 7 lines to draw
+				for(let i = 0; i <= landmark_data.length-1; i++){
+					// do not connect the last coord for each facial region (i.e. mouth, node, jaw, etc.) to anything
+					
+					// fix mouth (special case) 
+					if(i === 67){
+						// needs to connect with 60
+						context.beginPath();
+						context.moveTo(landmark_data[i].x, landmark_data[i].y);
+						context.lineTo(landmark_data[60].x, landmark_data[60].y);
+						context.stroke();
+					}else if(coordsToSkip.has(i)){
+						continue;
+					}else{
+						let x = landmark_data[i].x;
+						let y = landmark_data[i].y;
+						let x2 = landmark_data[i+1].x;
+						let y2 = landmark_data[i+1].y;
+						context.beginPath();
+						context.moveTo(x, y);
+						context.lineTo(x2, y2);
+						context.stroke();
+					}
 				}
-				let x = landmark_data[i].x;
-				let y = landmark_data[i].y;
-				let x2 = landmark_data[i+1].x;
-				let y2 = landmark_data[i+1].y;
-				context.beginPath();
-				context.moveTo(x, y);
-				context.lineTo(x2, y2);
-				context.stroke();
 			}
-			
 			//console.log(landmark_data);
 			//console.log("==========================")
 		});
