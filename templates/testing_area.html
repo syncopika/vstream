@@ -38,7 +38,7 @@
 			<br />
 			<br />
 			
-			<button id='nextAction'> pause/continue </button>
+			<button id='nextAction'> action </button>
 			
 		</div>
 	</body>
@@ -48,6 +48,18 @@
 	
 		let loadedModels = [];
 		const loader = new THREE.GLTFLoader();
+		let avatarVertices = null;
+		let avatarGeometry = null;
+		
+		function extractVertices(vertices){
+			let vertexSet = [];
+			for(let i = 0; i <= vertices.count - 3; i += 3){
+				let vertex = new THREE.Vector3();
+				vertex.fromBufferAttribute(vertices, i);
+				vertexSet.push(vertex);
+			}
+			return vertexSet;
+		}
 	
 		function getModel(modelFilePath, name){
 			return new Promise((resolve, reject) => {
@@ -64,6 +76,9 @@
 								
 								// https://stackoverflow.com/questions/52569738/how-to-access-single-vertices-of-mesh-loaded-with-gltfloader-in-three-js
 								console.log(geometry);
+								avatarVertices = geometry.attributes.position.array;
+								//console.log(avatarVertices);
+								avatarGeometry = geometry;
 								
 								let obj = new THREE.Mesh(geometry, material);
 								obj.scale.x = child.scale.x * 5;
@@ -109,15 +124,20 @@
 		scene.add(camera);
 
 		let pointLight = new THREE.PointLight(0xffffff, 1, 0); //new THREE.pointLight( 0xffffff );
-		pointLight.position.set(0, 2, 0);
+		pointLight.position.set(0, 10, 0);
 		pointLight.castShadow = true;
 		pointLight.shadow.mapSize.width = 512;
 		pointLight.shadow.mapSize.height = 512;
 		pointLight.shadow.camera.near = 10;
 		pointLight.shadow.camera.far = 100;
 		pointLight.shadow.camera.fov = 30;
-		scene.add(pointLight);
+		//scene.add(pointLight);
 
+		// https://discourse.threejs.org/t/solved-glb-model-is-very-dark/6258
+		// should always use a hemisphere light!
+		var hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
+		hemiLight.position.set(0, 300, 0);
+		scene.add(hemiLight);
 		
 		loadedModels.push(getModel('testing_stuff/basic_avatar_idea.glb', 'avatar'));
 		Promise.all(loadedModels).then((objects) => {
@@ -127,24 +147,50 @@
 				group.add(mesh);
 			
 				bgAxesHelper = new THREE.AxesHelper(10);
-				mesh.add(bgAxesHelper);
+				group.add(bgAxesHelper);
 			
 				//mesh.castShadow = true;
 				mesh.position.set(0,0,0);
-				group.position.set(0,5,0);
+				group.position.set(0,-12,7);
 				
 				scene.add(group);
 				
-				group.rotateOnAxis(new THREE.Vector3(0,1,0), -Math.PI/2);
-				group.rotateOnAxis(new THREE.Vector3(0,0,1), -Math.PI/2);
+				// have to do this weird set of rotations to get my avatar positioned correctly
+				group.rotateOnAxis(new THREE.Vector3(0,0,1), Math.PI/2);
 				group.rotateOnAxis(new THREE.Vector3(1,0,0), Math.PI/2);
-				//camera.lookAt(mesh);
+				group.rotateOnAxis(new THREE.Vector3(0,1,0), -Math.PI/2);
+
 				renderer.render(scene, camera);
 			});
 		});
+		
+		function moveVertex(vector3, x, y, z){
+			vector3.set(x, y, z);
+		}
+		
+		function test1(){
+			//console.log(avatarVertices);
+			// try to stretch the avatar a bit
+			for(let i = 0; i <= avatarVertices.count - 3; i += 3){
+				//console.log(avatarVertices[i]);
+				avatarVertices[i] = avatarVertices[i] + 2;
+				avatarVertices[i+2] = avatarVertices[i+2] * 1.2;
+				avatarVertices[i+1] = avatarVertices[i+1] + 1.5;
+			}
+			//console.log(avatarVertices);
+			// https://stackoverflow.com/questions/20303239/three-js-how-to-update-buffergeometry-vertices
+			// try this? https://stackoverflow.com/questions/36699389/verticesneedupdate-in-three-js/36699654#36699654
+			avatarGeometry.dynamic = true;
+			avatarGeometry.attributes.position.dynamic = true;
+			avatarGeometry.attributes.position.needsUpdate = true;
+			console.log(avatarGeometry);
+			renderer.render(scene, camera);
+		}
 
 
-		document.getElementById('nextAction').addEventListener('click', (evt) => {			
+		document.getElementById('nextAction').addEventListener('click', (evt) => {
+			test1();
+			renderer.render(scene, camera);
 		});
 	
 	</script>
