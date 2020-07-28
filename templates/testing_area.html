@@ -169,19 +169,20 @@
 		}
 		
 		function test1(){
-			//console.log(avatarVertices);
+			console.log(avatarVertices);
 			// try to stretch the avatar a bit
-			for(let i = 0; i <= avatarVertices.count - 3; i += 3){
-				//console.log(avatarVertices[i]);
-				avatarVertices[i] = avatarVertices[i] + 2;
-				avatarVertices[i+2] = avatarVertices[i+2] * 1.2;
+			
+			for(let i = 0; i <= avatarVertices.length - 3; i += 3){
+				avatarVertices[i] = avatarVertices[i] + 0.20;
+				//avatarVertices[i+2] = avatarVertices[i+2] * 1.2;
 				avatarVertices[i+1] = avatarVertices[i+1] + 1.5;
 			}
-			//console.log(avatarVertices);
+			console.log(avatarVertices);
 			// https://stackoverflow.com/questions/20303239/three-js-how-to-update-buffergeometry-vertices
 			// try this? https://stackoverflow.com/questions/36699389/verticesneedupdate-in-three-js/36699654#36699654
-			avatarGeometry.dynamic = true;
-			avatarGeometry.attributes.position.dynamic = true;
+			// https://threejsfundamentals.org/threejs/lessons/threejs-custom-buffergeometry.html
+			//avatarGeometry.dynamic = true;
+			//avatarGeometry.attributes.position.dynamic = true;
 			avatarGeometry.attributes.position.needsUpdate = true;
 			console.log(avatarGeometry);
 			renderer.render(scene, camera);
