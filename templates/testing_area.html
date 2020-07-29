@@ -75,10 +75,29 @@
 								let geometry = child.geometry;
 								
 								// https://stackoverflow.com/questions/52569738/how-to-access-single-vertices-of-mesh-loaded-with-gltfloader-in-three-js
-								console.log(geometry);
+								//console.log(geometry);
 								avatarVertices = geometry.attributes.position.array;
-								//console.log(avatarVertices);
 								avatarGeometry = geometry;
+								
+								// assign color to each vertex 
+								// https://threejs.org/examples/webgl_geometry_colors
+								// https://stackoverflow.com/questions/10330342/threejs-assign-different-colors-to-each-vertex-in-a-geometry
+								const colorOptions = [new THREE.Color(0xff0000), new THREE.Color(0x00ff00), new THREE.Color(0x0000ff)];
+								const colorIdx = 0;
+								
+								let count = geometry.attributes.position.count;
+								geometry.attributes['color'] = new THREE.BufferAttribute(new Float32Array(count * 3), 3);
+								
+								let colors = geometry.attributes.color;
+								//console.log(geometry);
+								
+								for(let i = 0; i < count; i++){
+									let currColor = colorOptions[(i % 3)];
+									colors.setXYZ(i, currColor.r, currColor.g, currColor.b);
+								}
+								
+								console.log(geometry);
+								//material = new THREE.MeshBasicMaterial({ vertexColors: THREE.VertexColors });
 								
 								let obj = new THREE.Mesh(geometry, material);
 								obj.scale.x = child.scale.x * 5;
@@ -168,23 +187,32 @@
 			vector3.set(x, y, z);
 		}
 		
+		let currVertex = 0; //there are 35 total 
 		function test1(){
-			console.log(avatarVertices);
 			// try to stretch the avatar a bit
+			// might be useful https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Iterators_and_Generators
 			
+			let verts = extractVertices(avatarGeometry.attributes.position);
+			//console.log(verts.length);
+			
+			let v = (currVertex++ % verts.length)*3;
+			avatarVertices[v] = avatarVertices[v] + 0.50;
+			console.log("currently on vertex number: " + (currVertex - 1));
+			/*
 			for(let i = 0; i <= avatarVertices.length - 3; i += 3){
 				avatarVertices[i] = avatarVertices[i] + 0.20;
 				//avatarVertices[i+2] = avatarVertices[i+2] * 1.2;
-				avatarVertices[i+1] = avatarVertices[i+1] + 1.5;
-			}
-			console.log(avatarVertices);
+				//avatarVertices[i+1] = avatarVertices[i+1] + 1.2;
+			}*/			
+			
 			// https://stackoverflow.com/questions/20303239/three-js-how-to-update-buffergeometry-vertices
 			// try this? https://stackoverflow.com/questions/36699389/verticesneedupdate-in-three-js/36699654#36699654
 			// https://threejsfundamentals.org/threejs/lessons/threejs-custom-buffergeometry.html
 			//avatarGeometry.dynamic = true;
 			//avatarGeometry.attributes.position.dynamic = true;
 			avatarGeometry.attributes.position.needsUpdate = true;
-			console.log(avatarGeometry);
+			avatarGeometry.attributes.color.needsUpdate = true;
+			//console.log(avatarGeometry);
 			renderer.render(scene, camera);
 		}
 
