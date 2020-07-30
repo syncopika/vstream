@@ -50,9 +50,12 @@
 		const loader = new THREE.GLTFLoader();
 		let avatarVertices = null;
 		let avatarGeometry = null;
+		let avatar;
 		
 		function extractVertices(vertices){
+			//console.log(vertices.count);
 			let vertexSet = [];
+			// this for loop is wrong
 			for(let i = 0; i <= vertices.count - 3; i += 3){
 				let vertex = new THREE.Vector3();
 				vertex.fromBufferAttribute(vertices, i);
@@ -70,7 +73,8 @@
 							console.log(gltf.animations);
 						}
 						gltf.scene.traverse((child) => {
-							if(child.type === "Mesh"){			
+
+							if(child.type === "Mesh"){
 								let material = child.material;
 								let geometry = child.geometry;
 								
@@ -139,7 +143,7 @@
 		renderer.setSize(400, 400);	
 		el.appendChild(renderer.domElement);
 		
-		camera.position.set(0,0,25);
+		camera.position.set(0,2,20);
 		scene.add(camera);
 
 		let pointLight = new THREE.PointLight(0xffffff, 1, 0); //new THREE.pointLight( 0xffffff );
@@ -171,6 +175,7 @@
 				//mesh.castShadow = true;
 				mesh.position.set(0,0,0);
 				group.position.set(0,-12,7);
+				avatar = group;
 				
 				scene.add(group);
 				
@@ -187,15 +192,15 @@
 			vector3.set(x, y, z);
 		}
 		
-		let currVertex = 0; //there are 35 total 
+		let currVertex = 0;
 		function test1(){
 			// try to stretch the avatar a bit
 			// might be useful https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Iterators_and_Generators
 			
-			let verts = extractVertices(avatarGeometry.attributes.position);
+			//let verts = extractVertices(avatarGeometry.attributes.position);
 			//console.log(verts.length);
 			
-			let v = (currVertex++ % verts.length)*3;
+			let v = (currVertex++ % avatarGeometry.attributes.position.count)*3;
 			avatarVertices[v] = avatarVertices[v] + 0.50;
 			console.log("currently on vertex number: " + (currVertex - 1));
 			/*
@@ -215,12 +220,89 @@
 			//console.log(avatarGeometry);
 			renderer.render(scene, camera);
 		}
+		
+		function moveLeftEye(){
+			// ~index 11 - 17
+			for(let i = 11; i < 17; i++){
+				let index = i*3;
+				avatarVertices[index] = avatarVertices[index] + 0.50;
+			}
+		}
+		
+		function moveRightEye(){
+			// index ~92 - 100
+			for(let i = 92; i <= 100; i++){
+				let index = i*3;
+				avatarVertices[index] = avatarVertices[index] + 0.50;			
+			}
+		}
+		
+		function closeRightEye(){
+			// top eye verts (move them down)
+			//[95, 96, 98] 
+			[95, 96, 98].forEach((i) => {
+				let index = i*3;
+				avatarVertices[index+2] = avatarVertices[index+2] + 0.10;
+			});
+			
+			// bottom eye verts (move them up)
+			//[97, 99, 
+			[97, 99].forEach((i) => {
+				let index = i*3;
+				avatarVertices[index+2] = avatarVertices[index+2] - 0.10;			
+			});
+		}
+		
+		function openRightEye(){
+		}
+		
+		function moveMouth(){
+			// index ~12 - 19
+			for(let i = 12; i <= 19; i++){
+				let index = i*3;
+				avatarVertices[index] = avatarVertices[index] + 0.50;				
+			}
+		}
+
 
 
 		document.getElementById('nextAction').addEventListener('click', (evt) => {
-			test1();
+			//test1();
+			//moveRightEye();
+			//moveMouth();
+			closeRightEye()
+			avatar.rotateOnAxis(new THREE.Vector3(0,0,1), Math.PI/4); // degree of rotation can be a measure of 'sensitivity' maybe?
+			
+			avatarGeometry.attributes.position.needsUpdate = true;
+			avatarGeometry.attributes.color.needsUpdate = true;
 			renderer.render(scene, camera);
 		});
+		
+		
+		/*
+		
+			notes ----------------------
+			
+			7/29/20
+			hmm this is pretty hard and I am getting sad. :/
+			
+			ok so maybe the server can be keeping track of relative changes and
+			send commands over to the client to do them. hey, that sounds a lot like networking for games.
+			
+			i.e. do the eye vertices converge (i.e. eye closing).
+			if so, then just send that action to the browser and the client-side 
+			code can do the animation? 
+			
+			how can we take 2d coords and figure out what should be happening in 3d? is it even possible!?
+		
+			rotations should be not too bad right? we can start with that. i.e. if I rotate my head from one 
+			side to the other, with just 2d coords can I know something about my head's rotation?
+			
+			alright, I decided to google it and found this: https://stackoverflow.com/questions/54368577/how-do-you-transform-2d-facial-landmarks-into-3d-world-coordinates
+			
+			:(, but not surprised. this looks helpful though: https://github.com/TadasBaltrusaitis/OpenFace
+		
+		*/
 	
 	</script>
 	
