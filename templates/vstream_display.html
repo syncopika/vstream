@@ -28,7 +28,24 @@
 			<br />
 			<br />
 			
+			<button id='calibrate'> calibrate </button>
 			<button id='toggleStream'> pause/continue </button>
+			<br />
+			
+			<h3 id='currAnchorPosition'></h3>
+			<br />
+			
+			<h3 id='currentJawDist'></h3>
+			<br />
+			
+			<h3 id='currentAction'></h3>
+			<br />
+			
+			<h3 id='zAxisRotation'></h3>
+			<br />
+			
+			<h3 id='zAxisRotation2'></h3>
+			<br />
 			
 		</div>
 	</body>
@@ -37,6 +54,13 @@
 	<script>
 		const socket = io();
 		let streamPaused = false;
+		let calibrate = false;
+		
+		// let's use landmark coordinate number 27 and 30 (that's part of the nose)
+		let anchorPoint = null; // should be a map with just x and y as keys, i.e. {'x': 0, 'y': 0}
+		let anchorPoint2 = null; // use this point to create a 'normal' vector with anchorPoint.
+		let lastJawEndptDist = null;
+		
 		
 		function toggleStream(){
 			streamPaused = !streamPaused;
@@ -48,11 +72,83 @@
 			toggleStream();
 		});
 		
+		
+		function getDistance(point1, point2){
+			return Math.sqrt(Math.pow((point2.x - point1.x),2) + Math.pow((point2.y - point1.y),2));
+		}
+		
+		// pass in 2 coordinates
+		// https://stackoverflow.com/questions/14066933/direct-way-of-computing-clockwise-angle-between-2-vectors
+		function getAngle(vec1, vec2){
+			let dot = (vec1.x * vec2.x) + (vec1.y * vec2.y);
+			let det = (vec1.x * vec2.y) + (vec1.y * vec2.x);
+			let angle = Math.atan2(det, dot) * (180 / Math.PI);
+			return angle;
+		}
+		
+		// set the initial nose/anchor point that we can use to figure out when a rotation is happening
+		function calibrateAnchor(pt1, pt2){
+			// using global vars here 
+			anchorPoint = pt1;
+			anchorPoint2 = pt2;
+		}
+		
+		document.getElementById('calibrate').addEventListener('click', (evt) => {
+			calibrate = !calibrate;
+		});
+		
 		// handle receiving facial landmark coordinate data 
 		socket.on('landmarkCoordinates', (data) => {
 			let landmark_data = JSON.parse(data);
 			
 			if(landmark_data.length > 0){
+			
+				if(calibrate){
+					calibrateAnchor(landmark_data[27], landmark_data[30]);
+					calibrate = !calibrate;
+				}
+			
+				let rightJawEnd = landmark_data[0];
+				let leftJawEnd = landmark_data[16];
+				if(lastJawEndptDist === null){
+					lastJawEndptDist = getDistance(leftJawEnd, rightJawEnd);
+				}else{
+					// compare. however, note! moving the head up and down can trigger similar changes to moving backwards/forwards :<
+					let currDist = getDistance(leftJawEnd, rightJawEnd);
+					
+					// how much room can we give before something is actually considered moving towards or away from the cam?
+					// we should allow for some small dist changes before translating the avatar forwards or backwards
+					if(currDist < lastJawEndptDist - 2.5){
+						// moving backwards / away from camera 
+						// by how much?
+						document.getElementById('currentAction').textContent = "moving backwards...";
+					}else if(currDist > lastJawEndptDist + 2.5){
+						// moving forwards / towards camera
+						document.getElementById('currentAction').textContent = "moving forwards...";
+					}else{
+						document.getElementById('currentAction').textContent = "";
+					}
+					
+					document.getElementById('currentJawDist').textContent = "curr jaw endpoints distance: " + currDist;
+					
+					// reset
+					lastJawEndptDist = currDist;
+				}
+				
+				
+				// are we rotating the head about the z-axis (the axis coming at the camera)
+				if(anchorPoint){
+					let currAnchor1 = landmark_data[27]; // we just need one point?
+
+					//let currAnchor2 = landmark_data[30];
+					let angle = getAngle(currAnchor1, anchorPoint);
+					document.getElementById('zAxisRotation2').textContent = "z-axis angle: " + angle + " degrees. currAnchor1.y: " + currAnchor1.y + ", anchorPoint.y: " + anchorPoint.y;
+					if(angle > 20){
+						document.getElementById('zAxisRotation').textContent = "rotate about z-axis! angle: " + angle + " degrees.";
+						anchorPoint = currAnchor1;
+					}
+					document.getElementById('currAnchorPosition').textContent = "curr anchor position => x: " + anchorPoint.x + ", y: " + anchorPoint.y;
+				}
 			
 				let canvas = document.getElementById("display");
 				let context = canvas.getContext("2d");
