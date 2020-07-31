@@ -56,6 +56,7 @@
 		let streamPaused = false;
 		let calibrate = false;
 		
+		// maybe instead of anchor points, we just save all the points of the previous frame to compare with. :>
 		// let's use landmark coordinate number 27 and 30 (that's part of the nose)
 		let anchorPoint = null; // should be a map with just x and y as keys, i.e. {'x': 0, 'y': 0}
 		let anchorPoint2 = null; // use this point to create a 'normal' vector with anchorPoint.
@@ -81,7 +82,7 @@
 		// https://stackoverflow.com/questions/14066933/direct-way-of-computing-clockwise-angle-between-2-vectors
 		function getAngle(vec1, vec2){
 			let dot = (vec1.x * vec2.x) + (vec1.y * vec2.y);
-			let det = (vec1.x * vec2.y) + (vec1.y * vec2.x);
+			let det = (vec1.x * vec2.y) - (vec1.y * vec2.x);
 			let angle = Math.atan2(det, dot) * (180 / Math.PI);
 			return angle;
 		}
@@ -103,6 +104,7 @@
 			
 			if(landmark_data.length > 0){
 			
+				////////// start movement calculation stuff (i.e. determine how to rotate/translate head)
 				if(calibrate){
 					calibrateAnchor(landmark_data[27], landmark_data[30]);
 					calibrate = !calibrate;
@@ -129,26 +131,41 @@
 						document.getElementById('currentAction').textContent = "";
 					}
 					
-					document.getElementById('currentJawDist').textContent = "curr jaw endpoints distance: " + currDist;
+					//document.getElementById('currentJawDist').textContent = "curr jaw endpoints distance: " + currDist;
 					
 					// reset
 					lastJawEndptDist = currDist;
 				}
 				
 				
-				// are we rotating the head about the z-axis (the axis coming at the camera)
+				// are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts
 				if(anchorPoint){
 					let currAnchor1 = landmark_data[27]; // we just need one point?
 
 					//let currAnchor2 = landmark_data[30];
 					let angle = getAngle(currAnchor1, anchorPoint);
-					document.getElementById('zAxisRotation2').textContent = "z-axis angle: " + angle + " degrees. currAnchor1.y: " + currAnchor1.y + ", anchorPoint.y: " + anchorPoint.y;
-					if(angle > 20){
+					//document.getElementById('zAxisRotation2').textContent = "z-axis angle: " + angle + " degrees. currAnchor1.y: " + currAnchor1.y + ", anchorPoint.y: " + anchorPoint.y;
+					if(Math.abs(angle) > 2){
 						document.getElementById('zAxisRotation').textContent = "rotate about z-axis! angle: " + angle + " degrees.";
 						anchorPoint = currAnchor1;
+					}else{
+						document.getElementById('zAxisRotation').textContent = "";
 					}
 					document.getElementById('currAnchorPosition').textContent = "curr anchor position => x: " + anchorPoint.x + ", y: " + anchorPoint.y;
 				}
+				
+				// are we rotating about the y-axis (axis going up/down). captures head rotation when looking left/right
+				// look at distance between nose point and jaw endpoints
+				// uh but what if the head is tilted???
+				
+				// are we rotating about the x-axis (axis going left/right). captures nodding motions.
+				// can use nose anchor point and just check y-axis?
+				
+				// are we translating the head? i.e. moving the head left/right without any rotations?
+				// just sample a few points and get the diff?
+				
+				/////////// end movement calculation stuff
+				
 			
 				let canvas = document.getElementById("display");
 				let context = canvas.getContext("2d");
