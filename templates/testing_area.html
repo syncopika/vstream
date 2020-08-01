@@ -146,16 +146,6 @@
 		camera.position.set(0,2,20);
 		scene.add(camera);
 
-		let pointLight = new THREE.PointLight(0xffffff, 1, 0); //new THREE.pointLight( 0xffffff );
-		pointLight.position.set(0, 10, 0);
-		pointLight.castShadow = true;
-		pointLight.shadow.mapSize.width = 512;
-		pointLight.shadow.mapSize.height = 512;
-		pointLight.shadow.camera.near = 10;
-		pointLight.shadow.camera.far = 100;
-		pointLight.shadow.camera.fov = 30;
-		//scene.add(pointLight);
-
 		// https://discourse.threejs.org/t/solved-glb-model-is-very-dark/6258
 		// should always use a hemisphere light!
 		var hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);

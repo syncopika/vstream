@@ -38,13 +38,19 @@
 			<h3 id='currentJawDist'></h3>
 			<br />
 			
+			<h2> translation: </h2>
 			<h3 id='currentAction'></h3>
 			<br />
 			
+			<h2> z-axis rotation: </h2>
 			<h3 id='zAxisRotation'></h3>
 			<br />
 			
 			<h3 id='zAxisRotation2'></h3>
+			<br />
+			
+			<h2> y-axis rotation: </h2>
+			<h3 id='yAxisRotation'></h3>
 			<br />
 			
 		</div>
@@ -61,7 +67,11 @@
 		let anchorPoint = null; // should be a map with just x and y as keys, i.e. {'x': 0, 'y': 0}
 		let anchorPoint2 = null; // use this point to create a 'normal' vector with anchorPoint.
 		let lastJawEndptDist = null;
-		
+		let rightJawEnd = null;
+		let leftJawEnd = null;
+		let updateAnchorPoint = false;
+		let prevAnchor = null;
+		let currAnchor = null;
 		
 		function toggleStream(){
 			streamPaused = !streamPaused;
@@ -94,6 +104,10 @@
 			anchorPoint2 = pt2;
 		}
 		
+		function inRange(x1, x2, rangeLimit){
+			return (x1 <= x2 + rangeLimit) && (x1 >= x2 - rangeLimit);
+		}
+		
 		document.getElementById('calibrate').addEventListener('click', (evt) => {
 			calibrate = !calibrate;
 		});
@@ -106,16 +120,17 @@
 			
 				////////// start movement calculation stuff (i.e. determine how to rotate/translate head)
 				if(calibrate){
-					calibrateAnchor(landmark_data[27], landmark_data[30]);
+					//calibrateAnchor(landmark_data[27], landmark_data[30]);
 					calibrate = !calibrate;
+					prevAnchor = landmark_data[27];
 				}
 			
-				let rightJawEnd = landmark_data[0];
-				let leftJawEnd = landmark_data[16];
+				rightJawEnd = landmark_data[0];
+				leftJawEnd = landmark_data[16];
 				if(lastJawEndptDist === null){
 					lastJawEndptDist = getDistance(leftJawEnd, rightJawEnd);
 				}else{
-					// compare. however, note! moving the head up and down can trigger similar changes to moving backwards/forwards :<
+					// note! moving the head up and down can trigger similar changes to moving backwards/forwards :<
 					let currDist = getDistance(leftJawEnd, rightJawEnd);
 					
 					// how much room can we give before something is actually considered moving towards or away from the cam?
@@ -138,28 +153,57 @@
 				}
 				
 				
-				// are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts
-				if(anchorPoint){
-					let currAnchor1 = landmark_data[27]; // we just need one point?
+				// are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts sideways
+				if(prevAnchor){
+				
+					currAnchor = landmark_data[27]; // we just need one point?
 
 					//let currAnchor2 = landmark_data[30];
-					let angle = getAngle(currAnchor1, anchorPoint);
+					let angle = getAngle(currAnchor, prevAnchor);
 					//document.getElementById('zAxisRotation2').textContent = "z-axis angle: " + angle + " degrees. currAnchor1.y: " + currAnchor1.y + ", anchorPoint.y: " + anchorPoint.y;
-					if(Math.abs(angle) > 2){
+					if(Math.abs(angle) > 2 && !(inRange(leftJawEnd.y, rightJawEnd.y, 3.0))){
 						document.getElementById('zAxisRotation').textContent = "rotate about z-axis! angle: " + angle + " degrees.";
-						anchorPoint = currAnchor1;
+						updateAnchorPoint = true;
 					}else{
 						document.getElementById('zAxisRotation').textContent = "";
 					}
-					document.getElementById('currAnchorPosition').textContent = "curr anchor position => x: " + anchorPoint.x + ", y: " + anchorPoint.y;
+					document.getElementById('currAnchorPosition').textContent = "curr anchor position => x: " + currAnchor.x + ", y: " + currAnchor.y;
 				}
 				
 				// are we rotating about the y-axis (axis going up/down). captures head rotation when looking left/right
 				// look at distance between nose point and jaw endpoints
-				// uh but what if the head is tilted???
+				// uh but what if the head is tilted??? we can use the jaw endpoints to help (look at their y-values?)
+				if(prevAnchor){
+				
+					currAnchor = landmark_data[27]; // we just need one point?
+					
+					// need to make sure the jaw endpoints are pretty much at the same level 
+					// and check to see that the curr anchor pt. is 
+					let diff = currAnchor.x - prevAnchor.x;
+					let turnDirection = diff > 0.0 ? "left" : "right";
+					
+					if(inRange(leftJawEnd.y, rightJawEnd.y, 1.0) && !(inRange(currAnchor.x, prevAnchor.x, 2.0))){
+						// if the curr pos of currAnchor1 is more than a certain amount away from the prev anchorPoint along the x-axis
+						// and as long as the y-coords of the jaw endpoints are pretty similar
+						updateAnchorPoint = true;
+						document.getElementById('yAxisRotation').textContent = "rotate about y-axis! direction: " + turnDirection + ", currAnchor.x: " + currAnchor.x + ", prevAnchor.x: " + prevAnchor.x;
+					}else{
+						document.getElementById('yAxisRotation').textContent = "";
+					}
+					
+				}
+				
 				
 				// are we rotating about the x-axis (axis going left/right). captures nodding motions.
 				// can use nose anchor point and just check y-axis?
+				
+				
+				
+				if(updateAnchorPoint){
+					prevAnchor = currAnchor;
+					updateAnchorPoint = false;
+				}
+				
 				
 				// are we translating the head? i.e. moving the head left/right without any rotations?
 				// just sample a few points and get the diff?
