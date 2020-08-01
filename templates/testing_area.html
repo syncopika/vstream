@@ -211,20 +211,30 @@
 			renderer.render(scene, camera);
 		}
 		
+		function testMoveBody(){
+			// vertices for the body
+			let verts = [1,2,3,4,5,6,7,27,28,29,30,31,32,33,40,41,42,43,44,45,46,47];
+			verts.forEach((vertNum) => {
+				let i = vertNum*3;
+				avatarVertices[i] = avatarVertices[i] + 0.50;		
+			});
+		}
+		
 		function moveLeftEye(){
-			// ~index 11 - 17
-			for(let i = 11; i < 17; i++){
+			let verts = [68,76];
+			verts.forEach((i) => {
 				let index = i*3;
 				avatarVertices[index] = avatarVertices[index] + 0.50;
-			}
+			});
 		}
 		
 		function moveRightEye(){
 			// index ~92 - 100
-			for(let i = 92; i <= 100; i++){
+			let verts = [92,93,94,95,96,97,98,99,100];
+			verts.forEach((i) => {
 				let index = i*3;
 				avatarVertices[index] = avatarVertices[index] + 0.50;			
-			}
+			});
 		}
 		
 		function closeRightEye(){
@@ -259,10 +269,11 @@
 		document.getElementById('nextAction').addEventListener('click', (evt) => {
 			//test1();
 			//moveRightEye();
+			//moveLeftEye();
 			//moveMouth();
-			closeRightEye()
-			avatar.rotateOnAxis(new THREE.Vector3(0,0,1), Math.PI/4); // degree of rotation can be a measure of 'sensitivity' maybe?
-			
+			//closeRightEye()
+			//avatar.rotateOnAxis(new THREE.Vector3(0,0,1), Math.PI/4); // degree of rotation can be a measure of 'sensitivity' maybe?
+			testMoveBody();
 			avatarGeometry.attributes.position.needsUpdate = true;
 			avatarGeometry.attributes.color.needsUpdate = true;
 			renderer.render(scene, camera);
