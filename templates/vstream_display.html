@@ -92,7 +92,8 @@
 		const baselineMouthCalibration = {
 			"top2d": {}, // x,y coord
 			"bottom2d": {},
-			"dist": 0
+			"dist2d": 0, // distance between the top and bottom pts for the 2d canvas (landmark pts)
+			//"dist3d": 0 // distance between the top and bottom pts for the model
 		};
 		
 		function toggleStream(){
@@ -126,11 +127,21 @@
 			anchorPoint2 = pt2;
 		}
 		
-		function calibrateMouthBaseline(top, bottom){
+		function calibrateMouthBaseline(top2d, bottom2d, top3d, bottom3d){
 			// this is ref'ing a global var. amaybe pass as param instead?
-			baselineMouthCalibration.top2d = top;
-			baselineMouthCalibration.bottom2d = bottom;
-			baselineMouthCalibration.dist = getDistance(top, bottom);
+			
+			// these coords are kinda useless when a rotation occurs
+			// but I think we can assume some things. when a rotation occurs,
+			// we can always get the position of the top mouth coord for free 
+			// and since distance is preserved as well, we can figure out where 
+			// the bottom mouth coord should be given that info so we'll always have a baseline (i.e. position of mouth coords for a closed mouth position)
+			baselineMouthCalibration.top2d = top2d;
+			baselineMouthCalibration.bottom2d = bottom2d;
+			//baselineMouthCalibration.top3d = top3d;
+			//baselineMouthCalibration.bottom3d = bottom3d;
+			
+			baselineMouthCalibration.dist2d = getDistance(top2d, bottom2d);
+			//baselineMouthCalibration.dist3d = getDistance(top3d, bottom3d);
 		}
 		
 		function inRange(x1, x2, rangeLimit){
@@ -338,7 +349,15 @@
 					//calibrateAnchor(landmark_data[27], landmark_data[30]);
 					calibrate = !calibrate;
 					prevAnchor = landmark_data[27];
-					calibrateMouthBaseline(landmark_data[63], landmark_data[67]);
+					
+					
+					// this is for the 3d model. not godd that we have to hunt for the right verts to ref but maybe we can fix that.
+					// wait this might not even be necessary... the info from the 2d face tracking dontrols any movement that occurs on the model.
+					// so, we only need to worry about the 2d side of things really (I think). i'm very confused right now lol.
+					let mouthVerts = avatarParts.mouth.attributes.position.array; //[idx*3 + 1]; // +1 for the y coord
+					let topMouthVert = {'x': mouthVerts[0], 'y': mouthVerts[1]}; // remember that mouthVerts is an array with each coordinate's x,y,z being their own index.
+					let bottomMouthVert = {'x': mouthVerts[11*3], 'y': mouthVerts[11*3 + 1]};
+					calibrateMouthBaseline(landmark_data[63], landmark_data[67], topMouthVert, bottomMouthVert);
 				}
 			
 				rightJawEnd = landmark_data[0];
@@ -375,7 +394,28 @@
 					lastBottomLipPos = landmark_data[67];
 				}
 				
-				if(baselineMouthCalibration.dist && Math.abs(landmark_data[67].y - lastBottomLipPos.y) > 1.5){
+				// I want to clamp angles so it shouldn't be possible to have the bottom lip y be higher than the top lip y 
+				// also, rotations preserve distances so it should be ok to use the same baseline no matter the rotation. 
+				// more notes:
+				/*
+					I think one of the problems is that I'm assuming by using just the middle mouth top/bottom vertices 
+					I can control the movement of the mouth. but the other vertices for the bottom of the mouth, when 
+					adding/subtracting distance to their y-coords, don't seem to stay in sync. 
+					
+					another issue is that when the model is imported with three.js, some vertices get duplicated because 
+					it's triangulating everything. so this makes it a bit trickier to move stuff based on vertices 
+					
+					also, maybe we can define some boundaries:
+					i.e. when top and bottom are within 0.5 or something distance-wise, don't allow further movement 
+					when top and bottom are x distance-wise, that's wide enough and don't allow further expansion
+					
+					so we check distance first. forget the calibration stuff for now. if we do that later, I'm thinking 
+					we have multiple calibration steps to figure out the boundaries. 
+					
+					also, we really should try clamping angles first as well.
+				
+				*/
+				if(baselineMouthCalibration.dist2d && Math.abs(landmark_data[67].y - lastBottomLipPos.y) > 1.8){
 				
 					document.getElementById('mouthCheck').textContent = "closed mouth baseline ok";
 				
@@ -383,20 +423,27 @@
 					
 					let deltaDist = landmark_data[67].y - lastBottomLipPos.y; //currDist - baselineMouthCalibration.dist;
 					
-					if(deltaDist < 0){
-						document.getElementById('mouthCheck').textContent = "closing mouth";
-					}else{
-						document.getElementById('mouthCheck').textContent = "opening mouth";
-					}
+					// try to make it more resilient to small fluctuations in y-axis of the current bottom mouth point?
+					if(Math.abs(deltaDist) > 1.5){
+					
+						if(deltaDist < 0){
+							document.getElementById('mouthCheck').textContent = "closing mouth";
+						}else{
+							document.getElementById('mouthCheck').textContent = "opening mouth";
+						}
 
-					if(Math.abs(currDist) > baselineMouthCalibration.dist && landmark_data[67].y > landmark_data[63].y){
-						let amountToMove = (deltaDist*-1) * 1.2; // invert deltaDist because in the 2d canvas world going up means subtracting (since top left corner is 0,0)
-						bottomMouthVerts.forEach((idx) => {
-							//document.getElementById('mouthCheck').textContent = "moving bottom mouth vertices!";
-							let vertY = avatarParts.mouth.attributes.position.array[idx*3 + 1]; // +1 for the y coord
-							avatarParts.mouth.attributes.position.array[idx*3 + 1] = vertY + amountToMove;
-						});
-						lastBottomLipPos = landmark_data[67];
+						if(Math.abs(currDist) > baselineMouthCalibration.dist2d && landmark_data[67].y > landmark_data[63].y){
+							let amountToMove = (deltaDist*-1); // invert deltaDist because in the 2d canvas world goiverticesng up means subtracting (since top left corner is 0,0)
+							
+							//if(deltaDist + landmark_data[67].y >= baselineMouthCalibration.top2d.y){
+								bottomMouthVerts.forEach((idx) => {
+									//document.getElementById('mouthCheck').textContent = "moving bottom mouth !";
+									let vertY = avatarParts.mouth.attributes.position.array[idx*3 + 1]; // +1 for the y coord
+									avatarParts.mouth.attributes.position.array[idx*3 + 1] = vertY + amountToMove;
+								});
+								lastBottomLipPos = landmark_data[67];
+							//}
+						}
 					}
 				}
 				
