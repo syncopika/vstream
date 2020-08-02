@@ -3,6 +3,8 @@
 	<!-- 
 		this page is for exploring manipulating vertices of a geometry and to 
 		experiment with some ideas on how to do that given real-time facial landmark data.
+		
+		good to know info: https://blender.stackexchange.com/questions/167372/gltf-export-has-twice-the-vertices-it-should
 	-->
 
 	<head>
@@ -46,11 +48,20 @@
 
 	<script>
 	
-		let loadedModels = [];
 		const loader = new THREE.GLTFLoader();
+		let loadedModels = [];
 		let avatarVertices = null;
 		let avatarGeometry = null;
 		let avatar;
+		
+		const avatarParts = {
+			"head": null,
+			"leftEyebrow": null,
+			"leftEye": null,
+			"rightEyebrow": null,
+			"rightEye": null,
+			"mouth": null
+		};
 		
 		function extractVertices(vertices){
 			//console.log(vertices.count);
@@ -72,51 +83,38 @@
 						if(gltf.animations.length > 0){
 							console.log(gltf.animations);
 						}
+						var count = 0;
+						var faceParts = [];
 						gltf.scene.traverse((child) => {
 
 							if(child.type === "Mesh"){
+								
+								var name = "mesh" + count;
+								
 								let material = child.material;
 								let geometry = child.geometry;
+								//console.log(geometry);
 								
 								// https://stackoverflow.com/questions/52569738/how-to-access-single-vertices-of-mesh-loaded-with-gltfloader-in-three-js
-								//console.log(geometry);
-								avatarVertices = geometry.attributes.position.array;
-								avatarGeometry = geometry;
-								
-								// assign color to each vertex 
-								// https://threejs.org/examples/webgl_geometry_colors
-								// https://stackoverflow.com/questions/10330342/threejs-assign-different-colors-to-each-vertex-in-a-geometry
-								const colorOptions = [new THREE.Color(0xff0000), new THREE.Color(0x00ff00), new THREE.Color(0x0000ff)];
-								const colorIdx = 0;
-								
-								let count = geometry.attributes.position.count;
-								geometry.attributes['color'] = new THREE.BufferAttribute(new Float32Array(count * 3), 3);
-								
-								let colors = geometry.attributes.color;
-								//console.log(geometry);
-								
-								for(let i = 0; i < count; i++){
-									let currColor = colorOptions[(i % 3)];
-									colors.setXYZ(i, currColor.r, currColor.g, currColor.b);
-								}
-								
-								console.log(geometry);
-								//material = new THREE.MeshBasicMaterial({ vertexColors: THREE.VertexColors });
+
 								
 								let obj = new THREE.Mesh(geometry, material);
 								obj.scale.x = child.scale.x * 5;
 								obj.scale.y = child.scale.y * 5;
 								obj.scale.z = child.scale.z * 5;
 
-								//obj.rotateOnAxis(new THREE.Vector3(0,1,0), Math.PI);
-								//obj.rotateOnAxis(new THREE.Vector3(1,0,0), Math.PI);
+
 								
 								obj.name = name;
-								resolve(obj);
+								count++;
+								//resolve(obj);
+								faceParts.push(obj);
+								
 							}else{
 								//console.log(child.type);
 							}
 						});
+						resolve(faceParts);
 					},
 					// called while loading is progressing
 					function(xhr){
@@ -152,29 +150,73 @@
 		hemiLight.position.set(0, 300, 0);
 		scene.add(hemiLight);
 		
-		loadedModels.push(getModel('testing_stuff/basic_avatar_idea.glb', 'avatar'));
-		Promise.all(loadedModels).then((objects) => {
-			objects.forEach((mesh) => {
-			
-				var group = new THREE.Group();
-				group.add(mesh);
-			
-				bgAxesHelper = new THREE.AxesHelper(10);
-				group.add(bgAxesHelper);
-			
-				//mesh.castShadow = true;
-				mesh.position.set(0,0,0);
-				group.position.set(0,-12,7);
-				avatar = group;
-				
-				scene.add(group);
-				
-				// have to do this weird set of rotations to get my avatar positioned correctly
-				group.rotateOnAxis(new THREE.Vector3(0,0,1), Math.PI/2);
-				group.rotateOnAxis(new THREE.Vector3(1,0,0), Math.PI/2);
-				group.rotateOnAxis(new THREE.Vector3(0,1,0), -Math.PI/2);
 
-				renderer.render(scene, camera);
+		loadedModels.push(getModel('testing_stuff/basic_avatar_head.glb', 'avatar'));
+		var group = new THREE.Group();
+		
+		Promise.all(loadedModels).then((objects) => {
+			objects.forEach((meshList) => {
+				
+				var count = 0;
+				
+				// note that i'm assuming a list of meshes coming in. change this later
+				meshList.forEach((mesh) => {
+					console.log(mesh);
+					group.add(mesh);
+				
+					bgAxesHelper = new THREE.AxesHelper(10);
+					group.add(bgAxesHelper);
+					//mesh.position.set(0,0,0);
+					
+					if(mesh.name === "mesh0"){
+						// the head 
+						avatarParts.head = mesh.geometry;
+					}
+					
+					// loading the meshes is not always in the same order!!!
+					if(mesh.name === "mesh1"){
+						// right eye
+						mesh.position.set(-3.5,3,0);
+						avatarParts.rightEye = mesh.geometry;
+					}
+					
+					if(mesh.name === "mesh2"){
+						// left eye
+						mesh.position.set(3.5,3,0);
+						avatarParts.leftEye = mesh.geometry;
+					}
+					
+					if(mesh.name === "mesh3"){
+						// left eyebrow
+						mesh.position.set(3.5,6.5,0);
+						avatarParts.leftEyebrow = mesh.geometry;
+					}
+					
+					if(mesh.name === "mesh4"){
+						// right eyebrow
+						mesh.position.set(-3.5,6.5,0);
+						avatarParts.rightEyebrow = mesh.geometry;
+					}
+					
+					if(mesh.name === "mesh5"){
+						// mouth
+						mesh.position.set(0,-5,0);
+						avatarParts.mouth = mesh.geometry;
+					}
+					
+					count++;
+					
+					if(count === 6){
+						//mesh.castShadow = true;
+						console.log(avatarParts);
+						group.position.set(0,0,0);
+						avatar = group;
+					
+						scene.add(group);
+
+						renderer.render(scene, camera);
+					}
+				});
 			});
 		});
 		
@@ -186,96 +228,56 @@
 		function test1(){
 			// try to stretch the avatar a bit
 			// might be useful https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Iterators_and_Generators
+			let part = avatarParts.mouth; //.rightEye;
 			
-			//let verts = extractVertices(avatarGeometry.attributes.position);
+			avatarVertices = part.attributes.position.array;
 			//console.log(verts.length);
 			
-			let v = (currVertex++ % avatarGeometry.attributes.position.count)*3;
-			avatarVertices[v] = avatarVertices[v] + 0.50;
-			console.log("currently on vertex number: " + (currVertex - 1));
-			/*
-			for(let i = 0; i <= avatarVertices.length - 3; i += 3){
-				avatarVertices[i] = avatarVertices[i] + 0.20;
-				//avatarVertices[i+2] = avatarVertices[i+2] * 1.2;
-				//avatarVertices[i+1] = avatarVertices[i+1] + 1.2;
-			}*/			
+			let v = (currVertex++ % part.attributes.position.count)*3;
+
+			avatarVertices[v] = avatarVertices[v] + 1.50;
+			console.log("currently on vertex number: " + (currVertex - 1) % part.attributes.position.count);
 			
 			// https://stackoverflow.com/questions/20303239/three-js-how-to-update-buffergeometry-vertices
 			// try this? https://stackoverflow.com/questions/36699389/verticesneedupdate-in-three-js/36699654#36699654
 			// https://threejsfundamentals.org/threejs/lessons/threejs-custom-buffergeometry.html
-			//avatarGeometry.dynamic = true;
-			//avatarGeometry.attributes.position.dynamic = true;
-			avatarGeometry.attributes.position.needsUpdate = true;
-			avatarGeometry.attributes.color.needsUpdate = true;
-			//console.log(avatarGeometry);
+
+			part.attributes.position.needsUpdate = true;
 			renderer.render(scene, camera);
 		}
 		
-		function testMoveBody(){
-			// vertices for the body
-			let verts = [1,2,3,4,5,6,7,27,28,29,30,31,32,33,40,41,42,43,44,45,46,47];
-			verts.forEach((vertNum) => {
-				let i = vertNum*3;
-				avatarVertices[i] = avatarVertices[i] + 0.50;		
-			});
-		}
-		
 		function moveLeftEye(){
-			let verts = [68,76];
-			verts.forEach((i) => {
-				let index = i*3;
-				avatarVertices[index] = avatarVertices[index] + 0.50;
-			});
 		}
 		
 		function moveRightEye(){
-			// index ~92 - 100
-			let verts = [92,93,94,95,96,97,98,99,100];
-			verts.forEach((i) => {
-				let index = i*3;
-				avatarVertices[index] = avatarVertices[index] + 0.50;			
-			});
 		}
 		
 		function closeRightEye(){
-			// top eye verts (move them down)
-			//[95, 96, 98] 
-			[95, 96, 98].forEach((i) => {
-				let index = i*3;
-				avatarVertices[index+2] = avatarVertices[index+2] + 0.10;
-			});
-			
-			// bottom eye verts (move them up)
-			//[97, 99, 
-			[97, 99].forEach((i) => {
-				let index = i*3;
-				avatarVertices[index+2] = avatarVertices[index+2] - 0.10;			
-			});
 		}
 		
 		function openRightEye(){
 		}
 		
 		function moveMouth(){
-			// index ~12 - 19
-			for(let i = 12; i <= 19; i++){
-				let index = i*3;
-				avatarVertices[index] = avatarVertices[index] + 0.50;				
-			}
+			
+		}
+		
+		function rotateFaceZ(){
+			group.rotateZ(Math.PI / 8);
 		}
 
 
-
 		document.getElementById('nextAction').addEventListener('click', (evt) => {
-			//test1();
+			//rotateFaceZ();
+			test1();
 			//moveRightEye();
 			//moveLeftEye();
 			//moveMouth();
 			//closeRightEye()
 			//avatar.rotateOnAxis(new THREE.Vector3(0,0,1), Math.PI/4); // degree of rotation can be a measure of 'sensitivity' maybe?
-			testMoveBody();
-			avatarGeometry.attributes.position.needsUpdate = true;
-			avatarGeometry.attributes.color.needsUpdate = true;
+			//testMoveBody();
+			avatarParts.mouth.attributes.position.needsUpdate = true;
+			//avatarGeometry.attributes.color.needsUpdate = true;
 			renderer.render(scene, camera);
 		});
 		

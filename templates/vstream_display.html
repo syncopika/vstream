@@ -3,6 +3,8 @@
 	<head>
 		<title>vstream display</title>
 		<script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
+		<script src='https://cdnjs.cloudflare.com/ajax/libs/three.js/108/three.min.js'></script>
+		<script src='static/GLTFLoader.js'></script>
 	</head>
 	
 	<style>
@@ -13,8 +15,14 @@
 			position: relative;
 			display: block;
 		}
-		#display{
+		canvas{
 			border: #000 solid 1px;
+		}
+		#container{
+			width: 400px;
+			height: 400px;
+			margin: 0 auto;
+			display: inline-block;
 		}
 	</style>
 	
@@ -22,8 +30,13 @@
 		<div id='main'>
 			<h3> vstream display </h3>
 			
-			<canvas id='display' width='400px' height='400px'>
-			</canvas>
+			<div id='show'>
+				<canvas id='display' width='400px' height='400px'>
+				</canvas>
+			
+				<div id='container'>
+				</div>
+			</div>
 			
 			<br />
 			<br />
@@ -32,6 +45,8 @@
 			<button id='toggleStream'> pause/continue </button>
 			<br />
 			
+			<h3 id='mouthCheck'> this is a test </h3>
+			<!--
 			<h3 id='currAnchorPosition'></h3>
 			<br />
 			
@@ -52,6 +67,7 @@
 			<h2> y-axis rotation: </h2>
 			<h3 id='yAxisRotation'></h3>
 			<br />
+			-->
 			
 		</div>
 	</body>
@@ -73,6 +89,12 @@
 		let prevAnchor = null;
 		let currAnchor = null;
 		
+		const baselineMouthCalibration = {
+			"top2d": {}, // x,y coord
+			"bottom2d": {},
+			"dist": 0
+		};
+		
 		function toggleStream(){
 			streamPaused = !streamPaused;
 			socket.emit("toggleStream", streamPaused);
@@ -83,7 +105,7 @@
 			toggleStream();
 		});
 		
-		
+
 		function getDistance(point1, point2){
 			return Math.sqrt(Math.pow((point2.x - point1.x),2) + Math.pow((point2.y - point1.y),2));
 		}
@@ -104,6 +126,13 @@
 			anchorPoint2 = pt2;
 		}
 		
+		function calibrateMouthBaseline(top, bottom){
+			// this is ref'ing a global var. amaybe pass as param instead?
+			baselineMouthCalibration.top2d = top;
+			baselineMouthCalibration.bottom2d = bottom;
+			baselineMouthCalibration.dist = getDistance(top, bottom);
+		}
+		
 		function inRange(x1, x2, rangeLimit){
 			return (x1 <= x2 + rangeLimit) && (x1 >= x2 - rangeLimit);
 		}
@@ -112,17 +141,204 @@
 			calibrate = !calibrate;
 		});
 		
+		
+		
+		
+		
+		//////////////////////////////////////////// three js stuff
+		
+		function getModel(modelFilePath, name){
+			return new Promise((resolve, reject) => {
+				loader.load(
+					modelFilePath,
+					function(gltf){
+						if(gltf.animations.length > 0){
+							console.log(gltf.animations);
+						}
+						var count = 0;
+						var faceParts = [];
+						gltf.scene.traverse((child) => {
+
+							if(child.type === "Mesh"){
+								
+								var name = "mesh" + count;
+								
+								let material = child.material;
+								let geometry = child.geometry;
+								//console.log(geometry);
+								
+								// https://stackoverflow.com/questions/52569738/how-to-access-single-vertices-of-mesh-loaded-with-gltfloader-in-three-js
+								let obj = new THREE.Mesh(geometry, material);
+								obj.scale.x = child.scale.x * 5;
+								obj.scale.y = child.scale.y * 5;
+								obj.scale.z = child.scale.z * 5;
+								obj.name = name;
+								count++;
+								//resolve(obj);
+								faceParts.push(obj);
+								
+							}else{
+								//console.log(child.type);
+							}
+						});
+						resolve(faceParts);
+					},
+					// called while loading is progressing
+					function(xhr){
+						console.log( (xhr.loaded / xhr.total * 100) + '% loaded' );
+					},
+					// called when loading has errors
+					function(error){
+						console.log('An error happened');
+						console.log(error);
+					}
+				);
+			});
+		}
+		
+		const loader = new THREE.GLTFLoader();
+		let loadedModels = [];
+		
+		const avatarParts = {
+			"head": null,
+			"leftEyebrow": null,
+			"leftEye": null,
+			"rightEyebrow": null,
+			"rightEye": null,
+			"mouth": null
+		};
+		
+		const group = new THREE.Group();
+		let meshLoaded = false;
+		
+		const el = document.getElementById("container");
+		const renderer = new THREE.WebGLRenderer();
+		const fov = 60;
+		const camera = new THREE.PerspectiveCamera(fov, 1.0, 0.01, 1000);
+		const scene = new THREE.Scene();
+		scene.background = new THREE.Color(0xffffff);	
+		
+		renderer.shadowMap.enabled = true;
+		renderer.setSize(400, 400);	
+		el.appendChild(renderer.domElement);
+		
+		camera.position.set(0,2,25);
+		scene.add(camera);
+		
+		
+		// https://discourse.threejs.org/t/solved-glb-model-is-very-dark/6258
+		// should always use a hemisphere light!
+		var hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
+		hemiLight.position.set(0, 300, 0);
+		scene.add(hemiLight);
+		
+
+		loadedModels.push(getModel('../static/basic_avatar_head.glb', 'avatar'));
+
+		Promise.all(loadedModels).then((objects) => {
+			objects.forEach((meshList) => {
+				
+				var count = 0;
+				
+				// note that i'm assuming a list of meshes coming in. change this later
+				meshList.forEach((mesh) => {
+					console.log(mesh);
+					group.add(mesh);
+				
+					bgAxesHelper = new THREE.AxesHelper(10);
+					group.add(bgAxesHelper);
+					//mesh.position.set(0,0,0);
+					
+					if(mesh.name === "mesh0"){
+						// the head 
+						avatarParts.head = mesh.geometry;
+					}
+					
+					// loading the meshes is not always in the same order!!!
+					if(mesh.name === "mesh1"){
+						// right eye
+						mesh.position.set(-3.5,3,0);
+						avatarParts.rightEye = mesh.geometry;
+					}
+					
+					if(mesh.name === "mesh2"){
+						// left eye
+						mesh.position.set(3.5,3,0);
+						avatarParts.leftEye = mesh.geometry;
+					}
+					
+					if(mesh.name === "mesh3"){
+						// left eyebrow
+						mesh.position.set(3.5,6.5,0);
+						avatarParts.leftEyebrow = mesh.geometry;
+					}
+					
+					if(mesh.name === "mesh4"){
+						// right eyebrow
+						mesh.position.set(-3.5,6.5,0);
+						avatarParts.rightEyebrow = mesh.geometry;
+					}
+					
+					if(mesh.name === "mesh5"){
+						// mouth
+						mesh.position.set(0,-5,0);
+						avatarParts.mouth = mesh.geometry;
+					}
+					
+					count++;
+					
+					if(count === 6){
+						//mesh.castShadow = true;
+						console.log(avatarParts);
+						group.position.set(0,0,0);
+						avatar = group;
+					
+						scene.add(group);
+
+						renderer.render(scene, camera);
+						meshLoaded = true;
+					}
+				});
+			});
+		});
+			
+	
+	///////////////////////////////////////////////////////////
+	
+		let movingForwards = false;
+		let movingBackwards = false;
+		let zRotateLeft = false;
+		let zRotateRight = false;
+		let yRotateLeft = false;
+		let yRotateRight = false;
+		//let closedMouthBaseline = 0.0; // the DISTANCE between a point from the top lip and a point from the bottom lip to determine when a mouth should be closed or opened (by default should be considered closed)
+										// to be determined by calibration
+		
+		let lastBottomLipPos = null;
+		
 		// handle receiving facial landmark coordinate data 
 		socket.on('landmarkCoordinates', (data) => {
 			let landmark_data = JSON.parse(data);
 			
-			if(landmark_data.length > 0){
+			if(meshLoaded && landmark_data.length > 0){
+			
+			
+				// make sure we know what parts of landmark_data map to what facial landmarks 
+				let leftEyeLandmark = landmark_data.slice(42, 48);
+				let rightEyeLandmark = landmark_data.slice(36, 42);
+				let leftEyebrowLandmark = landmark_data.slice(22, 26);
+				let rightEyebrowLandmark = landmark_data.slice(17, 22);
+				let jawLandmark = landmark_data.slice(0, 16);
+				//let mouth = [landmark_data[63], landmark_data[67]];
+				
+				let bottomMouthVerts = [2,5,8,9,10,11,12,13,14,15];
 			
 				////////// start movement calculation stuff (i.e. determine how to rotate/translate head)
 				if(calibrate){
 					//calibrateAnchor(landmark_data[27], landmark_data[30]);
 					calibrate = !calibrate;
 					prevAnchor = landmark_data[27];
+					calibrateMouthBaseline(landmark_data[63], landmark_data[67]);
 				}
 			
 				rightJawEnd = landmark_data[0];
@@ -138,12 +354,12 @@
 					if(currDist < lastJawEndptDist - 2.5){
 						// moving backwards / away from camera 
 						// by how much?
-						document.getElementById('currentAction').textContent = "moving backwards...";
+						movingBackwards = true;
+						//document.getElementById('currentAction').textContent = "moving backwards...";
 					}else if(currDist > lastJawEndptDist + 2.5){
 						// moving forwards / towards camera
-						document.getElementById('currentAction').textContent = "moving forwards...";
-					}else{
-						document.getElementById('currentAction').textContent = "";
+						//document.getElementById('currentAction').textContent = "moving forwards...";
+						movingForwards = true;
 					}
 					
 					//document.getElementById('currentJawDist').textContent = "curr jaw endpoints distance: " + currDist;
@@ -152,6 +368,37 @@
 					lastJawEndptDist = currDist;
 				}
 				
+				
+				// is the mouth expanding/closing?
+				// get the change in distance from baseline
+				if(lastBottomLipPos === null){
+					lastBottomLipPos = landmark_data[67];
+				}
+				
+				if(baselineMouthCalibration.dist && Math.abs(landmark_data[67].y - lastBottomLipPos.y) > 1.5){
+				
+					document.getElementById('mouthCheck').textContent = "closed mouth baseline ok";
+				
+					let currDist = getDistance(landmark_data[63], landmark_data[67]);
+					
+					let deltaDist = landmark_data[67].y - lastBottomLipPos.y; //currDist - baselineMouthCalibration.dist;
+					
+					if(deltaDist < 0){
+						document.getElementById('mouthCheck').textContent = "closing mouth";
+					}else{
+						document.getElementById('mouthCheck').textContent = "opening mouth";
+					}
+
+					if(Math.abs(currDist) > baselineMouthCalibration.dist && landmark_data[67].y > landmark_data[63].y){
+						let amountToMove = (deltaDist*-1) * 1.2; // invert deltaDist because in the 2d canvas world going up means subtracting (since top left corner is 0,0)
+						bottomMouthVerts.forEach((idx) => {
+							//document.getElementById('mouthCheck').textContent = "moving bottom mouth vertices!";
+							let vertY = avatarParts.mouth.attributes.position.array[idx*3 + 1]; // +1 for the y coord
+							avatarParts.mouth.attributes.position.array[idx*3 + 1] = vertY + amountToMove;
+						});
+						lastBottomLipPos = landmark_data[67];
+					}
+				}
 				
 				// are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts sideways
 				if(prevAnchor){
@@ -162,12 +409,14 @@
 					let angle = getAngle(currAnchor, prevAnchor);
 					//document.getElementById('zAxisRotation2').textContent = "z-axis angle: " + angle + " degrees. currAnchor1.y: " + currAnchor1.y + ", anchorPoint.y: " + anchorPoint.y;
 					if(Math.abs(angle) > 2 && !(inRange(leftJawEnd.y, rightJawEnd.y, 3.0))){
-						document.getElementById('zAxisRotation').textContent = "rotate about z-axis! angle: " + angle + " degrees.";
+						//document.getElementById('zAxisRotation').textContent = "rotate about z-axis! angle: " + angle + " degrees.";
 						updateAnchorPoint = true;
-					}else{
-						document.getElementById('zAxisRotation').textContent = "";
+						if(angle > 0){
+							zRotateLeft = true; 
+						}else{
+							zRotateRight = true;
+						}
 					}
-					document.getElementById('currAnchorPosition').textContent = "curr anchor position => x: " + currAnchor.x + ", y: " + currAnchor.y;
 				}
 				
 				// are we rotating about the y-axis (axis going up/down). captures head rotation when looking left/right
@@ -186,9 +435,12 @@
 						// if the curr pos of currAnchor1 is more than a certain amount away from the prev anchorPoint along the x-axis
 						// and as long as the y-coords of the jaw endpoints are pretty similar
 						updateAnchorPoint = true;
-						document.getElementById('yAxisRotation').textContent = "rotate about y-axis! direction: " + turnDirection + ", currAnchor.x: " + currAnchor.x + ", prevAnchor.x: " + prevAnchor.x;
-					}else{
-						document.getElementById('yAxisRotation').textContent = "";
+						//document.getElementById('yAxisRotation').textContent = "rotate about y-axis! direction: " + turnDirection + ", currAnchor.x: " + currAnchor.x + ", prevAnchor.x: " + prevAnchor.x;
+						if(turnDirection === "left"){
+							yRotateLeft = true;
+						}else{
+							yRotateRight = true;
+						}
 					}
 					
 				}
@@ -196,8 +448,6 @@
 				
 				// are we rotating about the x-axis (axis going left/right). captures nodding motions.
 				// can use nose anchor point and just check y-axis?
-				
-				
 				
 				if(updateAnchorPoint){
 					prevAnchor = currAnchor;
@@ -249,6 +499,52 @@
 						context.stroke();
 					}
 				}
+				
+				
+				// update mesh
+				if(movingForwards){
+					// just update camera!
+					camera.translateZ(-1.0);
+					movingForwards = false;
+				}else if(movingBackwards){
+					movingBackwards = false;
+					camera.translateZ(1.0);
+				}
+				
+				// rotate about z axis
+				if(zRotateLeft){
+					if(group.rotation.z < (Math.PI / 3)){
+						group.rotateOnWorldAxis(new THREE.Vector3(0,0,1), Math.PI / 8);
+					}
+					zRotateLeft = false;
+				}else if(zRotateRight){
+					if(group.rotation.z > (-Math.PI / 3)){
+						group.rotateOnWorldAxis(new THREE.Vector3(0,0,1), -Math.PI / 8);
+					}
+					zRotateRight = false;
+				}
+				
+				/*
+				// rotate about y axis
+				if(yRotateLeft){
+					if(group.rotation.y < (Math.PI / 3)){
+						// clamp the rotation
+						group.rotateOnWorldAxis(new THREE.Vector3(0,1,0), Math.PI / 8);
+					}
+					yRotateLeft = false;
+				}else if(yRotateRight){
+					if(group.rotation.y > (-Math.PI / 3)){
+						group.rotateOnWorldAxis(new THREE.Vector3(0,1,0), -Math.PI / 8);
+					}
+					yRotateRight = false;
+				}*/
+				
+				
+				for(let part in avatarParts){
+					avatarParts[part].attributes.position.needsUpdate = true;
+				}
+				renderer.render(scene, camera);
+				
 			}
 			//console.log(landmark_data);
 			//console.log("==========================")
