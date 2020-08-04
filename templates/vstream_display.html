@@ -74,6 +74,23 @@
 
 
 	<script>
+	
+		/* notes 
+		
+			oooh this looks good: https://github.com/auduno/clmtrackr
+		
+			potentially useful resources (mostly about morphing, but the warping step I think is really what we want):
+			https://www.cs.toronto.edu/~mangas/teaching/320/slides/CSC320T12.pdf
+			https://www.cs.toronto.edu/~mangas/teaching/320/slides/CSC320T12.pdf
+			https://pdfs.semanticscholar.org/f528/d3e9ca5b8bf7e3b47aadce9f151a6467150a.pdf
+			https://www.cs.uaf.edu/~olawlor/academic/thesis/ref/chen93interpolation.pdf -> 2.2 looks very relevant
+			http://eeweb.poly.edu/~yao/EL5123/lecture12_ImageWarping.pdf
+			
+			after more reading, not sure the info on warping is super helpful... :/
+			but, I think when I calibrate, I'll have to do some information gathering from the landmark coords. 
+			I just don't know right now exactly what I need.
+		*/
+	
 		const socket = io();
 		let streamPaused = false;
 		let calibrate = false;
@@ -254,7 +271,13 @@
 				// note that i'm assuming a list of meshes coming in. change this later
 				meshList.forEach((mesh) => {
 					console.log(mesh);
-					group.add(mesh);
+					
+					var wireframe = new THREE.WireframeGeometry(mesh.geometry);
+					var line = new THREE.LineSegments(wireframe);
+					line.material.depthTest = false;
+					line.material.opacity = .8;
+					line.material.transparent = true;
+					group.add(line);//mesh);
 				
 					bgAxesHelper = new THREE.AxesHelper(10);
 					group.add(bgAxesHelper);
@@ -262,38 +285,38 @@
 					
 					if(mesh.name === "mesh0"){
 						// the head 
-						avatarParts.head = mesh.geometry;
+						avatarParts.head = line.geometry;
 					}
 					
 					// loading the meshes is not always in the same order!!!
 					if(mesh.name === "mesh1"){
 						// right eye
-						mesh.position.set(-3.5,3,0);
-						avatarParts.rightEye = mesh.geometry;
+						line.position.set(-3.5,3,0);
+						avatarParts.rightEye = line.geometry;
 					}
 					
 					if(mesh.name === "mesh2"){
 						// left eye
-						mesh.position.set(3.5,3,0);
-						avatarParts.leftEye = mesh.geometry;
+						line.position.set(3.5,3,0);
+						avatarParts.leftEye = line.geometry;
 					}
 					
 					if(mesh.name === "mesh3"){
 						// left eyebrow
-						mesh.position.set(3.5,6.5,0);
-						avatarParts.leftEyebrow = mesh.geometry;
+						line.position.set(3.5,6.5,0);
+						avatarParts.leftEyebrow = line.geometry;
 					}
 					
 					if(mesh.name === "mesh4"){
 						// right eyebrow
-						mesh.position.set(-3.5,6.5,0);
-						avatarParts.rightEyebrow = mesh.geometry;
+						line.position.set(-3.5,6.5,0);
+						avatarParts.rightEyebrow = line.geometry;
 					}
 					
 					if(mesh.name === "mesh5"){
 						// mouth
-						mesh.position.set(0,-5,0);
-						avatarParts.mouth = mesh.geometry;
+						line.position.set(0,-5,0);
+						avatarParts.mouth = line.geometry;
 					}
 					
 					count++;
@@ -342,7 +365,7 @@
 				let jawLandmark = landmark_data.slice(0, 16);
 				//let mouth = [landmark_data[63], landmark_data[67]];
 				
-				let bottomMouthVerts = [2,5,8,9,10,11,12,13,14,15];
+				let bottomMouthVerts = [5,6,11,20,21,22,24,26,27,29,30,31,32,33,35,36,37,38];
 			
 				////////// start movement calculation stuff (i.e. determine how to rotate/translate head)
 				if(calibrate){
@@ -357,6 +380,17 @@
 					let mouthVerts = avatarParts.mouth.attributes.position.array; //[idx*3 + 1]; // +1 for the y coord
 					let topMouthVert = {'x': mouthVerts[0], 'y': mouthVerts[1]}; // remember that mouthVerts is an array with each coordinate's x,y,z being their own index.
 					let bottomMouthVert = {'x': mouthVerts[11*3], 'y': mouthVerts[11*3 + 1]};
+					
+					console.log("bottom mouth vert:");
+					console.log(landmark_data[67]);
+					console.log({'x': mouthVerts[11*3], 'y': mouthVerts[11*3 + 1]});
+					console.log(avatarParts.mouth.attributes.position.array);
+					
+					console.log("top mouth vert:");
+					console.log(landmark_data[63]);
+					console.log({'x': mouthVerts[0], 'y': mouthVerts[1]});
+					//console.log(avatarParts.mouth.attributes.position.array);
+					
 					calibrateMouthBaseline(landmark_data[63], landmark_data[67], topMouthVert, bottomMouthVert);
 				}
 			
@@ -370,12 +404,12 @@
 					
 					// how much room can we give before something is actually considered moving towards or away from the cam?
 					// we should allow for some small dist changes before translating the avatar forwards or backwards
-					if(currDist < lastJawEndptDist - 2.5){
+					if(currDist < lastJawEndptDist - 3){
 						// moving backwards / away from camera 
 						// by how much?
 						movingBackwards = true;
 						//document.getElementById('currentAction').textContent = "moving backwards...";
-					}else if(currDist > lastJawEndptDist + 2.5){
+					}else if(currDist > lastJawEndptDist + 3){
 						// moving forwards / towards camera
 						//document.getElementById('currentAction').textContent = "moving forwards...";
 						movingForwards = true;
@@ -398,7 +432,7 @@
 				// also, rotations preserve distances so it should be ok to use the same baseline no matter the rotation. 
 				// more notes:
 				/*
-					I think one of the problems is that I'm assuming by using just the middle mouth top/bottom vertices 
+					I think one of the problems is that I'm thinking by using just the middle mouth top/bottom vertices 
 					I can control the movement of the mouth. but the other vertices for the bottom of the mouth, when 
 					adding/subtracting distance to their y-coords, don't seem to stay in sync. 
 					
@@ -415,37 +449,54 @@
 					also, we really should try clamping angles first as well.
 				
 				*/
-				if(baselineMouthCalibration.dist2d && Math.abs(landmark_data[67].y - lastBottomLipPos.y) > 1.8){
+				if(baselineMouthCalibration.dist2d){// && Math.abs(landmark_data[67].y - lastBottomLipPos.y) > 1.8){
 				
-					document.getElementById('mouthCheck').textContent = "closed mouth baseline ok";
+					document.getElementById('mouthCheck').textContent = "closed mouth baseline ok. baseline distance 2d value: " + baselineMouthCalibration.dist2d;
 				
 					let currDist = getDistance(landmark_data[63], landmark_data[67]);
+					let pastBaseline = landmark_data[67].y < landmark_data[63].y;
 					
+					// maybe don't compare with last pos but instead compare with just the baseline and set vertex pos 
+					// that way (no addition of delta)
 					let deltaDist = landmark_data[67].y - lastBottomLipPos.y; //currDist - baselineMouthCalibration.dist;
 					
-					// try to make it more resilient to small fluctuations in y-axis of the current bottom mouth point?
-					if(Math.abs(deltaDist) > 1.5){
+					// hey wait here's a new idea: can't we get a general vector of the angle the face is at? we can use that to figure out new positions of vertices if needed maybe.
+					// try to make it more resilient to small fluctuations in y-axis of the current bottom mouth point by making sure currDist is large enough first
+					if(!pastBaseline && Math.abs(deltaDist) >= 2.0 && currDist >= baselineMouthCalibration.dist2d){// && landmark_data[67].y > landmark_data[63].y){
 					
-						if(deltaDist < 0){
-							document.getElementById('mouthCheck').textContent = "closing mouth";
-						}else{
-							document.getElementById('mouthCheck').textContent = "opening mouth";
-						}
+						let amountToMove = (deltaDist*-1); // invert deltaDist because in the 2d canvas world going up means subtracting (since top left corner is 0,0)
+						
+						bottomMouthVerts.forEach((idx) => {
+							//document.getElementById('mouthCheck').textContent = "moving bottom mouth !";
+							let vertY = avatarParts.mouth.attributes.position.array[idx*3 + 1]; // +1 for the y coord
+							avatarParts.mouth.attributes.position.array[idx*3 + 1] = vertY + amountToMove;
+						});
+						
+						lastBottomLipPos = landmark_data[67];
 
-						if(Math.abs(currDist) > baselineMouthCalibration.dist2d && landmark_data[67].y > landmark_data[63].y){
-							let amountToMove = (deltaDist*-1); // invert deltaDist because in the 2d canvas world goiverticesng up means subtracting (since top left corner is 0,0)
-							
-							//if(deltaDist + landmark_data[67].y >= baselineMouthCalibration.top2d.y){
-								bottomMouthVerts.forEach((idx) => {
-									//document.getElementById('mouthCheck').textContent = "moving bottom mouth !";
-									let vertY = avatarParts.mouth.attributes.position.array[idx*3 + 1]; // +1 for the y coord
-									avatarParts.mouth.attributes.position.array[idx*3 + 1] = vertY + amountToMove;
-								});
-								lastBottomLipPos = landmark_data[67];
-							//}
-						}
+						
+						/* check offset from baseline
+						let diffFromBaseline = landmark_data[67] - baselineMouthCalibration.bottom2d; 
+						bottomMouthVerts.forEach((idx) => {
+							let vertY = avatarParts.mouth.attributes.position.array[idx*3 + 1]; // +1 for the y coord
+							avatarParts.mouth.attributes.position.array[idx*3 + 1] = vertY + amountToMove;
+						});*/							
 					}
+					/*else if(!pastBaseline){
+						bottomMouthVerts.forEach((idx) => {
+							// close mouth
+							let vertY = avatarParts.mouth.attributes.position.array[idx*3 + 1]; // +1 for the y coord
+							// compare with baseline distance before moving?
+							avatarParts.mouth.attributes.position.array[idx*3 + 1] = vertY + 0.5; // increase because 3d space
+						});
+					}*/
 				}
+				
+				// work on moving the ends of the mouth along the x axis as well!
+				
+				
+				
+				
 				
 				// are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts sideways
 				if(prevAnchor){
