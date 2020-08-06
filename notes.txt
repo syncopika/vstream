@@ -1,0 +1,71 @@
+8/5/20
+
+try this:
+
+figure out some basic stuff first:
+  - clamp angles
+  - how are texures getting mapped to vertices in three.js?
+    - need to load in and attach texture to each mesh? (i.e. https://discourse.threejs.org/t/textures-map-incorrectly-to-gltf-object/11544)
+    - b/c wireframe movement doesn't seem to match up with texture movement when texure is applied
+
+
+then try these things:
+  - for the sake of getting things working, try mapping model vertices to landmark coords i.e.
+
+    - we have landmark coords in landmark_data where each element is a coordinate
+    - we have a bunch of meshes, each corresponding to a face part, and we know their vertices
+      - manually (for now) find the ones to match with landmark coords until we can figure out a strategy to automate that?
+    - in the end get something like:
+	vertexMapping = {
+		"mouthLeft": [index in landmark_data, index of the x-value of the corresponding vertex of the model],
+                ...
+        }
+      hmm there's still something wrong with this idea. it would be really nice if I could say, given the current state
+      of the landmark coords, move the mouth accordingly. then I'd just go through all the mouth landmark coords, find their 
+      corresponding 3d vertices, and move them. 
+ 
+      the next question is how much to move them, and how do I know where? 
+      need some way to track previous state probably. 
+
+      what about vertices that can't be mapped? how I deal with those? something about angles, vectors maybe?
+
+      ooh big thing: figuring out how the coords in 2d land for the landmark coords can be correlated with the model's points in 3d land.'
+		    how about this:
+			- 'normalize' the 2d world that the landmark coords come from by making the center of the 2d canvas 0, 0.
+			  then you just readjust all the coordinates based on the origin being at 0,0. so new x = width/2 - x if x < width/2.
+			  then do the same for the y-coord.
+
+basic algorithms as I have them now:
+  - detecting forward/backwards (i.e. getting closer to webcam, further away):
+	let dist = distance between the left jaw landmark coord and the right jaw landmark coord
+        if dist gets smaller:
+           move camera backwards
+        else:
+           move camera forwards
+     - notice we manipulate the camera here
+
+  - detecting side-to-side motion
+	haven't gotten this one yet :<
+
+  - detecting head tilt about z-axis (axis coming towards the camera)
+	get angle between where a nose landmark coord was last time and now (assuming they both form line segments with the origin).
+	if the angle is large enough:
+		if angle > 0:
+			rotate right 
+		else:
+			rotate left 
+
+	- I think it might be good to maintain a current rotation 'normal' vector that'll be parallel with the nose. it could be useful
+          when making lateral transformations at an angle I think (i.e. easily take the perpendicular vector of the normal and use that)
+
+  - moving the mouth
+	- 2-step process. move along the y-axis (up and down) then move along the x-axis (for now just the left and right corner of the mouth)
+	- right now this is no good because any movement is dependent on the initial starting coordinates (what I called baseline).
+	  it's bad because if the face moves from side-to-side or forwards/backwards, then that renders the initial baseline values useless.
+
+	- maybe try this:
+		we need to know just the initial distances/proportions at the beginning (calibration step?). those distances should be considered
+		baseline and can be considered like the minimum boundary.
+                then, since we have that info, we can just make adjustments to the mouth...how?
+
+

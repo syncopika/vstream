@@ -53,6 +53,7 @@
 		let avatarVertices = null;
 		let avatarGeometry = null;
 		let avatar;
+		let showWireframe = false;
 		
 		const avatarParts = {
 			"head": null,
@@ -160,52 +161,58 @@
 				meshList.forEach((mesh) => {
 					console.log(mesh);
 					
-					var wireframe = new THREE.WireframeGeometry(mesh.geometry);
-					var line = new THREE.LineSegments(wireframe);
-					line.material.depthTest = false;
-					line.material.opacity = .8;
-					line.material.transparent = true;
-					
-					group.add(line); //mesh);
+					if(showWireframe){
+						var wireframe = new THREE.WireframeGeometry(mesh.geometry);
+						var line = new THREE.LineSegments(wireframe);
+						line.material.depthTest = false;
+						line.material.opacity = .8;
+						line.material.transparent = true;
+						group.add(line);//mesh);
+					}else{
+						group.add(mesh);
+					}
 				
 					bgAxesHelper = new THREE.AxesHelper(10);
 					group.add(bgAxesHelper);
 					//mesh.position.set(0,0,0);
 					
+					let theMesh = showWireframe ? line : mesh;
+					let meshGeometry = showWireframe ? line.geometry : mesh.geometry;
+					
 					if(mesh.name === "mesh0"){
-						// the head
-						avatarParts.head = line.geometry;
+						// the head 
+						avatarParts.head = meshGeometry;
 					}
 					
 					// loading the meshes is not always in the same order!!!
 					if(mesh.name === "mesh1"){
 						// right eye
-						line.position.set(-3.5,3,0);
-						avatarParts.rightEye = line.geometry;
+						theMesh.position.set(-3.5,3,0);
+						avatarParts.rightEye = meshGeometry;
 					}
 					
 					if(mesh.name === "mesh2"){
 						// left eye
-						line.position.set(3.5,3,0);
-						avatarParts.leftEye = line.geometry;
+						theMesh.position.set(3.5,3,0);
+						avatarParts.leftEye = meshGeometry;
 					}
 					
 					if(mesh.name === "mesh3"){
 						// left eyebrow
-						line.position.set(3.5,6.5,0);
-						avatarParts.leftEyebrow = line.geometry;
+						theMesh.position.set(3.5,6.5,0);
+						avatarParts.leftEyebrow = meshGeometry;
 					}
 					
 					if(mesh.name === "mesh4"){
 						// right eyebrow
-						line.position.set(-3.5,6.5,0);
-						avatarParts.rightEyebrow = line.geometry;
+						theMesh.position.set(-3.5,6.5,0);
+						avatarParts.rightEyebrow = meshGeometry;
 					}
 					
 					if(mesh.name === "mesh5"){
 						// mouth
-						line.position.set(0,-5,0);
-						avatarParts.mouth = line.geometry;
+						theMesh.position.set(0,-5,0);
+						avatarParts.mouth = meshGeometry;
 					}
 					
 					count++;
