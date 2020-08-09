@@ -64,6 +64,22 @@
 			"mouth": null
 		};
 		
+		
+		const raycaster = new THREE.Raycaster();
+		const mouse = new THREE.Vector2(-1000, -1000);
+
+		function onMouseMove(event) {
+			// calculate mouse position in normalized device coordinates
+			// (-1 to +1) for both components
+			if(event.target.nodeName.toLowerCase() === "canvas"){
+				mouse.x = ( event.clientX / 400 ) * 2 - 1;
+				mouse.y = - ( event.clientY / 400 ) * 2 + 1;
+				console.log("mouse x: " + mouse.x + ", mouse y: " + mouse.y)
+			}
+		}
+
+
+		
 		function extractVertices(vertices){
 			//console.log(vertices.count);
 			let vertexSet = [];
@@ -81,35 +97,55 @@
 				loader.load(
 					modelFilePath,
 					function(gltf){
+						//console.log(gltf.scene);
 						if(gltf.animations.length > 0){
 							console.log(gltf.animations);
 						}
-						var count = 0;
 						var faceParts = [];
 						gltf.scene.traverse((child) => {
 
-							if(child.type === "Mesh"){
-								
-								var name = "mesh" + count;
+							if(child.type === "Mesh" || child.type === "SkinnedMesh"){
 								
 								let material = child.material;
 								let geometry = child.geometry;
-								//console.log(geometry);
+								let obj;
+
+								if(child.type === "SkinnedMesh"){
+									console.log(child);
+									
+									geometry.attributes.skinWeight.array[0] = 0;
+									geometry.attributes.skinWeight.array[4] = 0;
+									geometry.attributes.skinWeight.array[8] = 0;
+									geometry.attributes.skinWeight.array[12] = 0;
+									geometry.attributes.skinWeight.array[16] = 0;
+									geometry.attributes.skinWeight.array[20] = 0;
+									geometry.attributes.skinWeight.array[24] = 0;
+									geometry.attributes.skinWeight.array[28] = 0;
+									geometry.attributes.skinWeight.array[31] = 0;
+									
+									obj = new THREE.SkinnedMesh(geometry, material);
+									obj.bind(child.skeleton);
+									obj.add(child.skeleton.bones[0]);
+									
+									var helper = new THREE.SkeletonHelper(obj);
+									helper.material.linewidth = 2;
+									scene.add(helper);
+								}else{
+									obj = new THREE.Mesh(geometry, material);
+								}
 								
 								// https://stackoverflow.com/questions/52569738/how-to-access-single-vertices-of-mesh-loaded-with-gltfloader-in-three-js
 								
-								let obj = new THREE.Mesh(geometry, material);
 								obj.scale.x = child.scale.x * 5;
 								obj.scale.y = child.scale.y * 5;
 								obj.scale.z = child.scale.z * 5;
 
-								obj.name = name;
-								count++;
-								//resolve(obj);
+								obj.name = child.name;
+
 								faceParts.push(obj);
 								
-							}else{
-								//console.log(child.type);
+							}else if(child.type === "Bone"){
+								//console.log(child);
 							}
 						});
 						resolve(faceParts);
@@ -149,7 +185,7 @@
 		scene.add(hemiLight);
 		
 
-		loadedModels.push(getModel('testing_stuff/basic_avatar_head.glb', 'avatar'));
+		loadedModels.push(getModel('testing_stuff/basic_avatar_head-edit.gltf', 'avatar'));
 		var group = new THREE.Group();
 		
 		Promise.all(loadedModels).then((objects) => {
@@ -159,15 +195,15 @@
 				
 				// note that i'm assuming a list of meshes coming in. change this later
 				meshList.forEach((mesh) => {
-					console.log(mesh);
-					
+					//console.log(mesh);
+					//console.log("------------------------")
 					if(showWireframe){
 						var wireframe = new THREE.WireframeGeometry(mesh.geometry);
 						var line = new THREE.LineSegments(wireframe);
 						line.material.depthTest = false;
 						line.material.opacity = .8;
 						line.material.transparent = true;
-						group.add(line);//mesh);
+						group.add(line);
 					}else{
 						group.add(mesh);
 					}
@@ -178,54 +214,75 @@
 					
 					let theMesh = showWireframe ? line : mesh;
 					let meshGeometry = showWireframe ? line.geometry : mesh.geometry;
+					//console.log(meshGeometry);
+					//console.log("===================")
 					
-					if(mesh.name === "mesh0"){
+					if(mesh.name === "head"){
 						// the head 
 						avatarParts.head = meshGeometry;
 					}
 					
 					// loading the meshes is not always in the same order!!!
-					if(mesh.name === "mesh1"){
+					if(mesh.name === "rightEye"){
 						// right eye
 						theMesh.position.set(-3.5,3,0);
 						avatarParts.rightEye = meshGeometry;
 					}
 					
-					if(mesh.name === "mesh2"){
+					if(mesh.name === "leftEye"){
 						// left eye
 						theMesh.position.set(3.5,3,0);
 						avatarParts.leftEye = meshGeometry;
 					}
 					
-					if(mesh.name === "mesh3"){
+					if(mesh.name === "leftEyebrow"){
 						// left eyebrow
 						theMesh.position.set(3.5,6.5,0);
 						avatarParts.leftEyebrow = meshGeometry;
 					}
 					
-					if(mesh.name === "mesh4"){
+					if(mesh.name === "rightEyebrow"){
 						// right eyebrow
 						theMesh.position.set(-3.5,6.5,0);
 						avatarParts.rightEyebrow = meshGeometry;
 					}
 					
-					if(mesh.name === "mesh5"){
+					if(mesh.name === "mouth"){
 						// mouth
-						theMesh.position.set(0,-5,0);
-						avatarParts.mouth = meshGeometry;
+						theMesh.position.set(0,0,0);
+						avatarParts.mouth = mesh; //meshGeometry;
 					}
 					
 					count++;
 					
 					if(count === 6){
-						//mesh.castShadow = true;
 						console.log(avatarParts);
 						group.position.set(0,0,0);
 						avatar = group;
-					
 						scene.add(group);
-
 						renderer.render(scene, camera);
+						
+						/*
+						function render(){
+							// update the picking ray with the camera and mouse position
+							console.log("mouse x: " + mouse.x + ", mouse y: " + mouse.y)
+							raycaster.setFromCamera(mouse, camera);
+
+							// calculate objects intersecting the picking ray
+							let intersects = raycaster.intersectObjects(scene.children, true);
+
+							for (let i = 0; i < intersects.length; i++) {
+								console.log(intersects[i])
+								intersects[ i ].object.material.color.set( 0xff0000 );
+								break;
+							}
+
+							renderer.render( scene, camera );
+						}
+
+						window.addEventListener( 'mousemove', onMouseMove, false );
+						window.requestAnimationFrame(render);
+						*/
 					}
 				});
 			});
@@ -245,18 +302,22 @@
 			
 			avatarVertices = part.attributes.position.array;
 			//console.log(verts.length);
-			
+			console.log(part)
 		
 			//let v = (currVertex++ % part.attributes.position.count)*3;
 			//avatarVertices[v] = avatarVertices[v] + 5.50;
 			//console.log("currently on vertex number: " + (currVertex - 1) % part.attributes.position.count);
 			
-			//bottomMouthVerts.forEach((idx) => {
-			//	let v = idx*3 + 1;
-			//	avatarVertices[v] = avatarVertices[v] - 0.5;
-			//});
+			bottomMouthVerts.forEach((idx) => {
+				let v = idx*3 + 1;
+				avatarVertices[v] = avatarVertices[v] - 0.5;
+				
+				//console.log(idx)
+				//console.log("x: " + avatarVertices[v-1] + ", y: " + avatarVertices[v] + ", z: " + avatarVertices[v+1])
+				//console.log("==========================")
+			});
 			
-			
+			/*
 			cornerMouthVerts.forEach((idx) => {
 				let v = idx*3;
 				if(idx === 14 || idx === 18 || idx === 10){
@@ -265,7 +326,7 @@
 					avatarVertices[v] = avatarVertices[v] + 0.5;
 				}
 			});
-			
+			*/
 			
 			// https://stackoverflow.com/questions/20303239/three-js-how-to-update-buffergeometry-vertices
 			// try this? https://stackoverflow.com/questions/36699389/verticesneedupdate-in-three-js/36699654#36699654
@@ -295,17 +356,26 @@
 			group.rotateZ(Math.PI / 8);
 		}
 
+		let angle = 0.0;
+		function test2(){
+			let mouth = avatarParts.mouth;
+			let bone = mouth.children[0];
+			console.log(mouth);
+			angle -= 0.2;
+			bone.rotation.x = angle;
+		}
 
 		document.getElementById('nextAction').addEventListener('click', (evt) => {
+			test2();
 			//rotateFaceZ();
-			test1();
+			//test1();
 			//moveRightEye();
 			//moveLeftEye();
 			//moveMouth();
 			//closeRightEye()
 			//avatar.rotateOnAxis(new THREE.Vector3(0,0,1), Math.PI/4); // degree of rotation can be a measure of 'sensitivity' maybe?
 			//testMoveBody();
-			avatarParts.mouth.attributes.position.needsUpdate = true;
+			//avatarParts.mouth.attributes.position.needsUpdate = true;
 			//avatarGeometry.attributes.color.needsUpdate = true;
 			renderer.render(scene, camera);
 		});
