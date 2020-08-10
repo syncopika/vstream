@@ -68,4 +68,11 @@ basic algorithms as I have them now:
 		baseline and can be considered like the minimum boundary.
                 then, since we have that info, we can just make adjustments to the mouth...how?
 
+8/9/20
+finally making progress. SHAPE KEYS ARE THE ANSWER! SHAPE KEYS ARE AMAZING!! :D
+now I have to figure out how to refine some things and figure out how to deal with random spasms/jittering of the facial landmark coordinates.
+also the eye movement is also jittery.
 
+todo also: eyebrows. head rotation about y-axis. and x-axis?
+for rotation about the y-axis, taking one of the left nose coords and the last coord in the middle nose part and tracking the distance between 
+the 2 might be helpful.

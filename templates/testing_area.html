@@ -41,6 +41,7 @@
 			<br />
 			
 			<button id='nextAction'> action </button>
+			<button id='prevAction'> prev action </button>
 			
 		</div>
 	</body>
@@ -104,35 +105,18 @@
 						var faceParts = [];
 						gltf.scene.traverse((child) => {
 
-							if(child.type === "Mesh" || child.type === "SkinnedMesh"){
+							if(child.type === "Mesh"){
 								
 								let material = child.material;
 								let geometry = child.geometry;
 								let obj;
 
-								if(child.type === "SkinnedMesh"){
+								if(child.name === "mouth"){
 									console.log(child);
-									
-									geometry.attributes.skinWeight.array[0] = 0;
-									geometry.attributes.skinWeight.array[4] = 0;
-									geometry.attributes.skinWeight.array[8] = 0;
-									geometry.attributes.skinWeight.array[12] = 0;
-									geometry.attributes.skinWeight.array[16] = 0;
-									geometry.attributes.skinWeight.array[20] = 0;
-									geometry.attributes.skinWeight.array[24] = 0;
-									geometry.attributes.skinWeight.array[28] = 0;
-									geometry.attributes.skinWeight.array[31] = 0;
-									
-									obj = new THREE.SkinnedMesh(geometry, material);
-									obj.bind(child.skeleton);
-									obj.add(child.skeleton.bones[0]);
-									
-									var helper = new THREE.SkeletonHelper(obj);
-									helper.material.linewidth = 2;
-									scene.add(helper);
-								}else{
-									obj = new THREE.Mesh(geometry, material);
 								}
+								
+								obj = new THREE.Mesh(geometry, material);
+								
 								
 								// https://stackoverflow.com/questions/52569738/how-to-access-single-vertices-of-mesh-loaded-with-gltfloader-in-three-js
 								
@@ -175,7 +159,7 @@
 		renderer.setSize(400, 400);	
 		el.appendChild(renderer.domElement);
 		
-		camera.position.set(0,2,20);
+		camera.position.set(0,0,20);
 		scene.add(camera);
 
 		// https://discourse.threejs.org/t/solved-glb-model-is-very-dark/6258
@@ -185,7 +169,7 @@
 		scene.add(hemiLight);
 		
 
-		loadedModels.push(getModel('testing_stuff/basic_avatar_head-edit.gltf', 'avatar'));
+		loadedModels.push(getModel('testing_stuff/basic_avatar_head-edit2.gltf', 'avatar'));
 		var group = new THREE.Group();
 		
 		Promise.all(loadedModels).then((objects) => {
@@ -249,7 +233,7 @@
 					
 					if(mesh.name === "mouth"){
 						// mouth
-						theMesh.position.set(0,0,0);
+						theMesh.position.set(0,-4.2,0);
 						avatarParts.mouth = mesh; //meshGeometry;
 					}
 					
@@ -358,11 +342,13 @@
 
 		let angle = 0.0;
 		function test2(){
-			let mouth = avatarParts.mouth;
-			let bone = mouth.children[0];
-			console.log(mouth);
-			angle -= 0.2;
-			bone.rotation.x = angle;
+			angle += 0.08;
+			avatarParts.mouth.morphTargetInfluences[0] = angle;
+		}
+		
+		function test3(){
+			angle -= 0.02;
+			avatarParts.mouth.morphTargetInfluences[0] = angle;
 		}
 
 		document.getElementById('nextAction').addEventListener('click', (evt) => {
@@ -377,6 +363,11 @@
 			//testMoveBody();
 			//avatarParts.mouth.attributes.position.needsUpdate = true;
 			//avatarGeometry.attributes.color.needsUpdate = true;
+			renderer.render(scene, camera);
+		});
+		
+		document.getElementById('prevAction').addEventListener('click', (evt) => {
+			test3();
 			renderer.render(scene, camera);
 		});
 		
