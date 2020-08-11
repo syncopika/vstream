@@ -130,14 +130,11 @@
 			
 				if(part === "mouth"){
 					// let's only care about the mouth corners and one top/bottom vert
-					//baselineMouthCalibration.dist2d = getDistance(top2d, bottom2d);
-					let top = landmarkData[51];
-					let bottom = landmarkData[57];
-					//let rightJawEnd = landmarkData[0];
-					//let leftJawEnd = landmarkData[16];
+					let top = landmarkData[62];
+					let bottom = landmarkData[66];
 
-					let leftMouthCorner = landmarkData[48];
-					let rightMouthCorner = landmarkData[54];
+					let leftMouthCorner = landmarkData[60];
+					let rightMouthCorner = landmarkData[64];
 					
 					// record the distance between the bottom and top most mouth vertices
 					map['mouth'] = {
@@ -176,9 +173,31 @@
 				}
 				
 				if(part === "leftEyebrow"){
+					// the eyebrow will be treated a little differently in that 
+					// I think using the rightmost coord of the left eyebrow (left when facing the screen,
+					// so the coord closest to the top of the line going down the nose)
+					// and the leftmost coord of the right eyebrow and comparing distance between the coord
+					// at the top of the nose can help
+					
+					let middle = landmarkData[27];
+					let right = landmarkData[21];
+					map['leftEyebrow'] = {
+						'dist': {
+							'baseline': getDistance(right, middle),
+							'previous': 0
+						}
+					}
 				}
 				
 				if(part === "rightEyebrow"){
+					let middle = landmarkData[27];
+					let left = landmarkData[22];
+					map['rightEyebrow'] = {
+						'dist': {
+							'baseline': getDistance(left, middle),
+							'previous': 0
+						}
+					}
 				}
 				
 				if(part === "head"){
@@ -227,10 +246,10 @@
 						gltf.scene.traverse((child) => {
 
 							if(child.type === "Mesh"){
-	
+								
+								console.log(child);
 								let material = child.material;
 								let geometry = child.geometry;
-								//console.log(geometry);
 								
 								// https://stackoverflow.com/questions/52569738/how-to-access-single-vertices-of-mesh-loaded-with-gltfloader-in-three-js
 								let obj = new THREE.Mesh(geometry, material);
@@ -381,6 +400,11 @@
 			});
 		});
 		
+		function clamp(val, min, max){
+			val = val > 1.0 ? 1.0 : val;
+			val = val < 0.0 ? 0.0 : val;
+			return val;
+		}
 		
 		function handleMouthMovement(mapping, landmark_data, avatarParts){
 			let mouthVertical = mapping['mouth'].vertical;
@@ -401,10 +425,10 @@
 				lastHorz = mouthHorizontal.previous;
 			}
 			
-			let top2d = landmark_data[51];
-			let bottom2d = landmark_data[57];
-			let rightMouthCorner = landmark_data[54];
-			let leftMouthCorner = landmark_data[48];
+			let top2d = landmark_data[62];
+			let bottom2d = landmark_data[66];
+			let rightMouthCorner = landmark_data[64];
+			let leftMouthCorner = landmark_data[60];
 			
 			let currDistVert = getDistance(top2d, bottom2d);
 			let currDistHorz = getDistance(leftMouthCorner, rightMouthCorner);
@@ -420,17 +444,29 @@
 			let currMouthVertical = avatarParts.mouth.morphTargetInfluences[0]; // control vertical movement of mouth 
 			let currMouthHorizontal = avatarParts.mouth.morphTargetInfluences[2]; // control horizontal movement of mouth corners
 			
-			currMouthVertical = (currMouthVertical + deltaVert) < 0 ? 0 : currMouthVertical + deltaVert; // clamp (make a function for this?)
+			currMouthVertical = clamp(currMouthVertical + deltaVert, 0.0, 1.0); // clamp (make a function for this?)
 			avatarParts.mouth.morphTargetInfluences[0] = currMouthVertical;
 			mapping['mouth'].vertical.previous = currDistVert; // update previous with curr distance 
 			
 			// work on moving the ends of the mouth along the x axis as well!
 			// got shape keys! this is easy. just figure out the change in distance between the 2 mouth corners. yay
-			currMouthHorizontal = (currMouthHorizontal + deltaHorz) < 0 ? 0 : currMouthHorizontal + deltaHorz;
+			currMouthHorizontal = clamp(currMouthHorizontal + deltaHorz, 0.0, 1.0);
 			avatarParts.mouth.morphTargetInfluences[2] = currMouthHorizontal;
 			mapping['mouth'].horizontal.previous = currDistHorz;
+			
+			// support o mouth movement (i.e. forming an o)
+			// make sure we have some horizontal movement and vertical movement
+			if(currDistHorz < mouthHorizontal.baseline - 2.0 && currMouthVertical > 0.3){
+				// let's say baseline - 5.0 === maximum o mouth influence.
+				// max influence == 1, no influence == 0
+				// interpolation time 
+				let max = mouthHorizontal.baseline - 5.0; // the distance at which the o mouth will have maximum influence
+				let currVal = Math.min(currDistHorz / max, max);
+				avatarParts.mouth.morphTargetInfluences[1] = currVal;
+			}else{
+				avatarParts.mouth.morphTargetInfluences[1] = 0;
+			}
 		}
-		
 		
 		function handleEyeMovement(mapping, landmark_data, avatarParts){
 			// ok so I made this a bit confusing, sorry -__-
@@ -457,34 +493,57 @@
 			let currDistVertRight = getDistance(landmark_data[44], landmark_data[46]);
 			
 			let deltaVertLeft = (currDistVertLeft - lastVertLeft);
-			if(Math.abs(deltaVertLeft) > 1.0){
-				deltaVertLeft /= 5;
+			if(Math.abs(deltaVertLeft) > 1.5){
+				deltaVertLeft /= 4;
 				let currEyeLeft = avatarParts.leftEye.morphTargetInfluences[0];
 				
-				currEyeLeft = currEyeLeft - deltaVertLeft; // if the eye is closing, deltaVertLeft should be a negative value (thus adding to currEyeLeft)
-				
-				// clamp (make a function for this?)
-				currEyeLeft = currEyeLeft > 1.0 ? 1.0 : currEyeLeft;
-				currEyeLeft = currEyeLeft < 0.0 ? 0.0 : currEyeLeft;
+				currEyeLeft = clamp(currEyeLeft - deltaVertLeft, 0.0, 1.0); // if the eye is closing, deltaVertLeft should be a negative value (thus adding to currEyeLeft)
 				
 				avatarParts.leftEye.morphTargetInfluences[0] = currEyeLeft;
 				mapping['leftEye'].vertical.previous = currDistVertLeft;
 			}
 			
 			let deltaVertRight = (currDistVertRight - lastVertRight);
-			if(Math.abs(deltaVertRight) > 1.0){
-				deltaVertRight /= 5;
+			if(Math.abs(deltaVertRight) > 1.5){
+				deltaVertRight /= 4;
 				let currEyeRight = avatarParts.rightEye.morphTargetInfluences[0];
 				
-				currEyeRight = currEyeRight - deltaVertRight;
-				currEyeRight = currEyeRight > 1.0 ? 1.0 : currEyeRight;
-				currEyeRight = currEyeRight < 0.0 ? 0.0 : currEyeRight;
+				currEyeRight = clamp(currEyeRight - deltaVertRight, 0.0, 1.0);
 				
 				avatarParts.rightEye.morphTargetInfluences[0] = currEyeRight;
 				mapping['rightEye'].vertical.previous = currDistVertRight;
 			}
 		}
+		
+		
+		function handleEyebrowMovement(mapping, landmark_data, avatarParts){
+			let left = mapping.leftEyebrow.dist;
+			let right = mapping.rightEyebrow.dist;
 			
+			let leftPrev = left.previous === 0 ? left.baseline : left.previous;
+			let rightPrev = right.previous === 0 ? right.baseline : right.previous;
+			
+			let currDistLeft = getDistance(landmark_data[21], landmark_data[27]);
+			let currDistRight = getDistance(landmark_data[22], landmark_data[27]);
+			
+			let deltaLeft = currDistLeft - leftPrev;
+			if(Math.abs(deltaLeft) > 1.5){
+				let newVal = deltaLeft / 10;
+				let oldMorphVal = avatarParts.leftEyebrow.morphTargetInfluences[0];
+				avatarParts.leftEyebrow.morphTargetInfluences[0] = clamp(oldMorphVal + newVal, 0.0, 1.0); // eyebrow up
+				mapping.leftEyebrow.previous = deltaLeft;
+			}
+			
+			let deltaRight = currDistRight - rightPrev;
+			if(Math.abs(deltaRight) > 1.5){
+				let newVal = deltaRight / 10;
+				let oldMorphVal = avatarParts.rightEyebrow.morphTargetInfluences[0];
+				avatarParts.rightEyebrow.morphTargetInfluences[0] = clamp(oldMorphVal + newVal, 0.0, 1.0); // eyebrow up
+				mapping.rightEyebrow.previous = deltaRight;
+			}
+			
+			// what about eyebrow down???
+		}
 	
 		///////////////////////////////////////////////////////////
 	
@@ -549,6 +608,9 @@
 					handleEyeMovement(mapping, landmark_data, avatarParts);
 				}
 				
+				if(mapping['leftEyebrow'] && mapping['rightEyebrow']){
+					handleEyebrowMovement(mapping, landmark_data, avatarParts);
+				}
 				
 				// are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts sideways
 				if(prevAnchor){
@@ -557,7 +619,7 @@
 
 					//let currAnchor2 = landmark_data[30];
 					let angle = getAngle(currAnchor, prevAnchor);
-					//document.getElementById('zAxisRotation2').textContent = "z-axis angle: " + angle + " degrees. currAnchor1.y: " + currAnchor1.y + ", anchorPoint.y: " + anchorPoint.y;
+					
 					if(Math.abs(angle) > 2 && !(inRange(leftJawEnd.y, rightJawEnd.y, 3.0))){
 						//document.getElementById('zAxisRotation').textContent = "rotate about z-axis! angle: " + angle + " degrees.";
 						updateAnchorPoint = true;

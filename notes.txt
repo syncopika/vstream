@@ -76,3 +76,6 @@ also the eye movement is also jittery.
 todo also: eyebrows. head rotation about y-axis. and x-axis?
 for rotation about the y-axis, taking one of the left nose coords and the last coord in the middle nose part and tracking the distance between 
 the 2 might be helpful.
+
+8/10/20
+interesting: https://github.com/mrdoob/three.js/issues/6465
