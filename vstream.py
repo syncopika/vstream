@@ -96,6 +96,10 @@ class VStream(threading.Thread):
 				
 					# can we separate the shapes in the face?
 					# https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
+					
+					# might be helpful for pupil tracking: 
+					# https://stackoverflow.com/questions/45789549/track-eye-pupil-position-with-webcam-opencv-and-python
+					
 					shape = self.predictor(gray, face)
 					shape = face_utils.shape_to_np(shape)
 					

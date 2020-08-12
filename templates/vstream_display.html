@@ -59,7 +59,6 @@
 		
 			potentially useful resources (mostly about morphing, but the warping step I think is really what we want):
 			https://www.cs.toronto.edu/~mangas/teaching/320/slides/CSC320T12.pdf
-			https://www.cs.toronto.edu/~mangas/teaching/320/slides/CSC320T12.pdf
 			https://pdfs.semanticscholar.org/f528/d3e9ca5b8bf7e3b47aadce9f151a6467150a.pdf
 			https://www.cs.uaf.edu/~olawlor/academic/thesis/ref/chen93interpolation.pdf -> 2.2 looks very relevant
 			http://eeweb.poly.edu/~yao/EL5123/lecture12_ImageWarping.pdf
@@ -335,7 +334,7 @@
 						line.material.depthTest = false;
 						line.material.opacity = .8;
 						line.material.transparent = true;
-						group.add(line);//mesh);
+						group.add(line);
 					}else{
 						group.add(mesh);
 					}
@@ -413,17 +412,8 @@
 			// what's the delta from the last distance or the baseline distance we got when we calibrated?
 			let lastVert;
 			let lastHorz;
-			if(mouthVertical.previous === 0){
-				lastVert = mouthVertical.baseline;
-			}else{
-				lastVert = mouthVertical.previous;
-			}
-			
-			if(mouthHorizontal.previous === 0){
-				lastHorz = mouthHorizontal.baseline;
-			}else{
-				lastHorz = mouthHorizontal.previous;
-			}
+			lastVert = mouthVertical.previous === 0 ? mouthVertical.baseline : mouthVertical.previous;
+			lastHorz = mouthHorizontal.previous === 0 ? mouthHorizontal.baseline : mouthHorizontal.previous;
 			
 			let top2d = landmark_data[62];
 			let bottom2d = landmark_data[66];
@@ -438,8 +428,8 @@
 				return;
 			}
 			
-			let deltaVert = (currDistVert - lastVert) / 10;
-			let deltaHorz = (currDistHorz - lastHorz) / 10;
+			let deltaVert = (currDistVert - lastVert) / 8;
+			let deltaHorz = (currDistHorz - lastHorz) / 8;
 			
 			let currMouthVertical = avatarParts.mouth.morphTargetInfluences[0]; // control vertical movement of mouth 
 			let currMouthHorizontal = avatarParts.mouth.morphTargetInfluences[2]; // control horizontal movement of mouth corners
@@ -476,25 +466,17 @@
 			let leftEyeVertical = mapping['leftEye'].vertical;
 			let rightEyeVertical = mapping['rightEye'].vertical;
 			let lastVertLeft, lastVertRight;
+			let minDelta = 1.8;
 			
-			if(leftEyeVertical.previous === 0){
-				lastVertLeft = leftEyeVertical.baseline;
-			}else{
-				lastVertLeft = leftEyeVertical.previous;
-			}
-			
-			if(rightEyeVertical.previous === 0){
-				lastVertRight = rightEyeVertical.baseline;
-			}else{
-				lastVertRight = rightEyeVertical.previous;
-			}
-			
+			lastVertLeft = leftEyeVertical.previous === 0 ? leftEyeVertical.baseline : leftEyeVertical.previous;
+			lastVertRight = rightEyeVertical.previous === 0 ? rightEyeVertical.baseline : rightEyeVertical.previous;
+
 			let currDistVertLeft = getDistance(landmark_data[38], landmark_data[41]);
 			let currDistVertRight = getDistance(landmark_data[44], landmark_data[46]);
 			
 			let deltaVertLeft = (currDistVertLeft - lastVertLeft);
-			if(Math.abs(deltaVertLeft) > 1.5){
-				deltaVertLeft /= 4;
+			if(Math.abs(deltaVertLeft) > minDelta){
+				deltaVertLeft /= 3;
 				let currEyeLeft = avatarParts.leftEye.morphTargetInfluences[0];
 				
 				currEyeLeft = clamp(currEyeLeft - deltaVertLeft, 0.0, 1.0); // if the eye is closing, deltaVertLeft should be a negative value (thus adding to currEyeLeft)
@@ -504,8 +486,8 @@
 			}
 			
 			let deltaVertRight = (currDistVertRight - lastVertRight);
-			if(Math.abs(deltaVertRight) > 1.5){
-				deltaVertRight /= 4;
+			if(Math.abs(deltaVertRight) > minDelta){
+				deltaVertRight /= 3;
 				let currEyeRight = avatarParts.rightEye.morphTargetInfluences[0];
 				
 				currEyeRight = clamp(currEyeRight - deltaVertRight, 0.0, 1.0);
@@ -519,6 +501,7 @@
 		function handleEyebrowMovement(mapping, landmark_data, avatarParts){
 			let left = mapping.leftEyebrow.dist;
 			let right = mapping.rightEyebrow.dist;
+			let minDelta = 1.2;
 			
 			let leftPrev = left.previous === 0 ? left.baseline : left.previous;
 			let rightPrev = right.previous === 0 ? right.baseline : right.previous;
@@ -527,25 +510,78 @@
 			let currDistRight = getDistance(landmark_data[22], landmark_data[27]);
 			
 			let deltaLeft = currDistLeft - leftPrev;
-			if(Math.abs(deltaLeft) > 1.5){
-				let newVal = deltaLeft / 10;
+			if(Math.abs(deltaLeft) > minDelta && currDistLeft >= left.baseline){
+				let newVal = deltaLeft / 3;
 				let oldMorphVal = avatarParts.leftEyebrow.morphTargetInfluences[0];
 				avatarParts.leftEyebrow.morphTargetInfluences[0] = clamp(oldMorphVal + newVal, 0.0, 1.0); // eyebrow up
-				mapping.leftEyebrow.previous = deltaLeft;
+				mapping.leftEyebrow.dist.previous = currDistLeft;
 			}
 			
 			let deltaRight = currDistRight - rightPrev;
-			if(Math.abs(deltaRight) > 1.5){
-				let newVal = deltaRight / 10;
+			if(Math.abs(deltaRight) > minDelta && currDistRight >= right.baseline){
+				let newVal = deltaRight / 3;
 				let oldMorphVal = avatarParts.rightEyebrow.morphTargetInfluences[0];
 				avatarParts.rightEyebrow.morphTargetInfluences[0] = clamp(oldMorphVal + newVal, 0.0, 1.0); // eyebrow up
-				mapping.rightEyebrow.previous = deltaRight;
+				mapping.rightEyebrow.dist.previous = currDistRight;
 			}
 			
 			// what about eyebrow down???
+			if(Math.abs(deltaLeft) > minDelta && currDistLeft < left.baseline){
+				// we need to move the eyebrow down
+				let newVal = deltaLeft / 3;
+				let oldMorphVal = avatarParts.leftEyebrow.morphTargetInfluences[1];
+				avatarParts.leftEyebrow.morphTargetInfluences[1] = clamp(oldMorphVal + newVal, 0.0, 1.0); // eyebrow down
+				mapping.leftEyebrow.dist.previous = currDistLeft;
+			}
+			
+			if(Math.abs(deltaRight) > minDelta && currDistRight < right.baseline){
+				// we need to move the eyebrow down
+				let newVal = deltaRight / 3;
+				let oldMorphVal = avatarParts.rightEyebrow.morphTargetInfluences[1];
+				avatarParts.rightEyebrow.morphTargetInfluences[1] = clamp(oldMorphVal + newVal, 0.0, 1.0); // eyebrow down
+				mapping.rightEyebrow.dist.previous = currDistRight;
+			}
 		}
 	
 		///////////////////////////////////////////////////////////
+		
+		function updateCanvas(landmark_data, context){
+			// clear the canvas 
+			context.clearRect(0, 0, 400, 400);
+			
+			// draw on the canvas 
+			landmark_data.forEach((coord) => {
+				context.fillRect(coord.x, coord.y, 2, 2);
+			});
+			
+			// connect the dots
+			// fortunately, the coords should be organized so it's easy to connect the parts
+			// see: https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
+			let coordsToSkip = new Set([16, 21, 26, 35, 41, 47, 67]); // 7 regions === 7 lines to draw
+			for(let i = 0; i <= landmark_data.length-1; i++){
+				// do not connect the last coord for each facial region (i.e. mouth, node, jaw, etc.) to anything
+				
+				// fix mouth (special case) 
+				if(i === 67){
+					// needs to connect with 60
+					context.beginPath();
+					context.moveTo(landmark_data[i].x, landmark_data[i].y);
+					context.lineTo(landmark_data[60].x, landmark_data[60].y);
+					context.stroke();
+				}else if(coordsToSkip.has(i)){
+					continue;
+				}else{
+					let x = landmark_data[i].x;
+					let y = landmark_data[i].y;
+					let x2 = landmark_data[i+1].x;
+					let y2 = landmark_data[i+1].y;
+					context.beginPath();
+					context.moveTo(x, y);
+					context.lineTo(x2, y2);
+					context.stroke();
+				}
+			}
+		}
 	
 		let movingForwards = false;
 		let movingBackwards = false;
@@ -673,43 +709,8 @@
 			
 				let canvas = document.getElementById("display");
 				let context = canvas.getContext("2d");
-				
-				// clear the canvas 
-				context.clearRect(0, 0, 400, 400);
-				
-				// draw on the canvas 
-				landmark_data.forEach((coord) => {
-					context.fillRect(coord.x, coord.y, 2, 2);
-				});
-				
-				// connect the dots
-				// fortunately, the coords should be organized so it's easy to connect the parts
-				// see: https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
-				let coordsToSkip = new Set([16, 21, 26, 35, 41, 47, 67]); // 7 regions === 7 lines to draw
-				for(let i = 0; i <= landmark_data.length-1; i++){
-					// do not connect the last coord for each facial region (i.e. mouth, node, jaw, etc.) to anything
-					
-					// fix mouth (special case) 
-					if(i === 67){
-						// needs to connect with 60
-						context.beginPath();
-						context.moveTo(landmark_data[i].x, landmark_data[i].y);
-						context.lineTo(landmark_data[60].x, landmark_data[60].y);
-						context.stroke();
-					}else if(coordsToSkip.has(i)){
-						continue;
-					}else{
-						let x = landmark_data[i].x;
-						let y = landmark_data[i].y;
-						let x2 = landmark_data[i+1].x;
-						let y2 = landmark_data[i+1].y;
-						context.beginPath();
-						context.moveTo(x, y);
-						context.lineTo(x2, y2);
-						context.stroke();
-					}
-				}
-				
+				//updateCanvas(landmark_data, context);
+
 				
 				// update mesh
 				if(movingForwards){
@@ -734,7 +735,7 @@
 					zRotateRight = false;
 				}
 				
-				/*
+				
 				// rotate about y axis
 				if(yRotateLeft){
 					if(group.rotation.y < (Math.PI / 3)){
@@ -747,7 +748,7 @@
 						group.rotateOnWorldAxis(new THREE.Vector3(0,1,0), -Math.PI / 8);
 					}
 					yRotateRight = false;
-				}*/
+				}
 				
 				renderer.render(scene, camera);
 				
