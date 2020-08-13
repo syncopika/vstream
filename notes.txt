@@ -79,3 +79,12 @@ the 2 might be helpful.
 
 8/10/20
 interesting: https://github.com/mrdoob/three.js/issues/6465
+
+8/12/20
+idea for handling eye tracking/ moving eyeballs:
+	have a separate mesh with an opening and overlay that on top of the eye area (which is just a section of the face mesh). 
+        underneath the mesh with the opening will be the eyeball mesh. then join the opening mesh with the face mesh.
+      	I'm thinking you can paint this section of the face mesh white to represent the sclera. we can use the opening mesh to 
+        control eyelid movement as well with shape keys and be able to move the eyeball around without having to think about what happens
+        when the eye closes/opens. (cause currently in my avatar the eye opening/closing is just the top and bottom vertices of the 
+        eye mesh converging towards the middle. this will definitely not support eyeballs)

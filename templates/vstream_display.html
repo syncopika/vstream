@@ -313,11 +313,12 @@
 		// https://discourse.threejs.org/t/solved-glb-model-is-very-dark/6258
 		// should always use a hemisphere light!
 		var hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
-		hemiLight.position.set(0, 300, 0);
+		hemiLight.position.set(0, 200, 0);
 		scene.add(hemiLight);
 		
-
-		loadedModels.push(getModel('../static/basic_avatar_head-edit2.gltf', 'avatar'));
+		// basic_avatar_head-edit3.gltf is experimenting with a different kind of mesh setup for the eye.
+		// basic_avatar_head-edit2.gltf is the most up-to-date non-experimental
+		loadedModels.push(getModel('../static/basic_avatar_head-edit3.gltf', 'avatar'));
 
 		Promise.all(loadedModels).then((objects) => {
 			objects.forEach((meshList) => {
@@ -706,12 +707,13 @@
 				
 				/////////// end movement calculation stuff
 				
-			
+				
+				// update canvas with landmark coordinates
 				let canvas = document.getElementById("display");
 				let context = canvas.getContext("2d");
-				//updateCanvas(landmark_data, context);
+				updateCanvas(landmark_data, context);
 
-				
+
 				// update mesh
 				if(movingForwards){
 					// just update camera!
