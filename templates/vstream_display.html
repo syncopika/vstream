@@ -3,8 +3,17 @@
 	<head>
 		<title>vstream display</title>
 		<script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
+		<!--
 		<script src='https://cdnjs.cloudflare.com/ajax/libs/three.js/108/three.min.js'></script>
 		<script src='static/GLTFLoader.js'></script>
+		-->
+		<script src="{{ url_for('static', filename='node_modules/three/build/three.js')}}"></script>
+		
+		<!-- Flask issue with ES6 modules :( -->
+		<!--<script src="{{ url_for('static', filename='node_modules/three/examples/jsm/loaders/GLTFLoader.js') }}" type="module"></script>-->
+		
+		<script src='static/GLTFLoader.js'></script>
+		
 	</head>
 	
 	<style>
@@ -318,7 +327,7 @@
 		
 		// basic_avatar_head-edit3.gltf is experimenting with a different kind of mesh setup for the eye.
 		// basic_avatar_head-edit2.gltf is the most up-to-date non-experimental
-		loadedModels.push(getModel('../static/basic_avatar_head-edit3.gltf', 'avatar'));
+		loadedModels.push(getModel('../static/basic_avatar_head-edit4.gltf', 'avatar'));
 
 		Promise.all(loadedModels).then((objects) => {
 			objects.forEach((meshList) => {
