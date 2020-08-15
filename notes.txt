@@ -92,5 +92,9 @@ idea for handling eye tracking/ moving eyeballs:
 8/13/20
 I think there might be a bug in the gltf loader? if you join 2 meshes in Blender and you don't name the planes, the count gets off by 
 1 AND you might have 2 materials. for some reason, having the count be off and having more than 1 material caused the gltf loader
-to load those joined meshes twice using the plane name (i.e. PLane.002 and PLane.002-1, with the L in Plane uppercased as well which 
-might be a clue.) renaming the planes so they were in sequential order and removing the additional material fixed the issue.
+to load those joined meshes twice using the plane name (i.e. Plane.002 and Plane.002-1) renaming the planes so they were in sequential order and removing the additional material fixed the issue.
+
+8/14/20
+nevermind, no bug in the loader. the implementation is actually, I think, pretty good. the loader sees that my mesh has 2 materials and is able to split that mesh into the
+corresponding meshes for each material and groups them into a group, with the group being the name of the mesh named in Blender. So basically the expected mesh becomes
+a group when imported. 

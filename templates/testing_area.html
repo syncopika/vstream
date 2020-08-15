@@ -102,7 +102,8 @@
 						if(gltf.animations.length > 0){
 							console.log(gltf.animations);
 						}
-						var faceParts = [];
+						let faceParts = [];
+						let seen = new Set();
 						gltf.scene.traverse((child) => {
 
 							if(child.type === "Mesh"){
@@ -111,25 +112,32 @@
 								let geometry = child.geometry;
 								let obj;
 
-								if(child.name === "mouth"){
-									console.log(child);
-								}
+								//console.log(child);
 								
 								obj = new THREE.Mesh(geometry, material);
 								
 								
 								// https://stackoverflow.com/questions/52569738/how-to-access-single-vertices-of-mesh-loaded-with-gltfloader-in-three-js
 								
-								obj.scale.x = child.scale.x * 5;
-								obj.scale.y = child.scale.y * 5;
-								obj.scale.z = child.scale.z * 5;
-
-								obj.name = child.name;
-
-								faceParts.push(obj);
 								
-							}else if(child.type === "Bone"){
-								//console.log(child);
+								if(child.parent.name !== "Scene"){
+									if(!seen.has(child.parent.name)){
+										// this child is part of a group
+										child.parent.scale.x = child.parent.scale.x * 5;
+										child.parent.scale.y = child.parent.scale.y * 5;
+										child.parent.scale.z = child.parent.scale.z * 5;
+										faceParts.push(child.parent);
+										seen.add(child.parent.name);
+										console.log(child.parent);
+									}
+								}else{
+									//console.log(child.name);
+									obj.scale.x = child.scale.x * 5;
+									obj.scale.y = child.scale.y * 5;
+									obj.scale.z = child.scale.z * 5;
+									obj.name = child.name;
+									faceParts.push(obj);
+								}
 							}
 						});
 						resolve(faceParts);
@@ -153,6 +161,7 @@
 		const fov = 60;
 		const camera = new THREE.PerspectiveCamera(fov, 1.0, 0.01, 1000);
 		const scene = new THREE.Scene();
+		let bgAxesHelper;
 		scene.background = new THREE.Color(0xffffff);	
 		
 		renderer.shadowMap.enabled = true;
@@ -169,8 +178,10 @@
 		scene.add(hemiLight);
 		
 
-		loadedModels.push(getModel('testing_stuff/basic_avatar_head-edit2.gltf', 'avatar'));
+		loadedModels.push(getModel('testing_stuff/basic_avatar_head-edit4.1.gltf', 'avatar'));
 		var group = new THREE.Group();
+		
+		
 		
 		Promise.all(loadedModels).then((objects) => {
 			objects.forEach((meshList) => {
@@ -187,7 +198,7 @@
 						line.material.depthTest = false;
 						line.material.opacity = .8;
 						line.material.transparent = true;
-						group.add(line);
+						//group.add(line);
 					}else{
 						group.add(mesh);
 					}
@@ -197,44 +208,72 @@
 					//mesh.position.set(0,0,0);
 					
 					let theMesh = showWireframe ? line : mesh;
-					let meshGeometry = showWireframe ? line.geometry : mesh.geometry;
+					
+					let meshGeometry = null; 
+					if(mesh.type !== "Group"){
+						meshGeometry = showWireframe ? line.geometry : mesh.geometry;
+					}
+					
 					//console.log(meshGeometry);
 					//console.log("===================")
 					
 					if(mesh.name === "head"){
 						// the head 
-						avatarParts.head = meshGeometry;
+						if(theMesh.type !== "Group"){
+							avatarParts.head = meshGeometry;
+						}else{
+							avatarParts.head = mesh;
+						}
 					}
+					
 					
 					// loading the meshes is not always in the same order!!!
 					if(mesh.name === "rightEye"){
 						// right eye
 						theMesh.position.set(-3.5,3,0);
-						avatarParts.rightEye = meshGeometry;
+						
+						if(theMesh.type !== "Group"){
+							avatarParts.rightEye = meshGeometry;
+						}else{
+							avatarParts.rightEye = mesh;
+						}
+						
 					}
 					
 					if(mesh.name === "leftEye"){
 						// left eye
 						theMesh.position.set(3.5,3,0);
-						avatarParts.leftEye = meshGeometry;
+						if(theMesh.type !== "Group"){
+							avatarParts.leftEye = meshGeometry;
+						}else{
+							avatarParts.leftEye = mesh;
+						}
 					}
 					
 					if(mesh.name === "leftEyebrow"){
 						// left eyebrow
 						theMesh.position.set(3.5,6.5,0);
-						avatarParts.leftEyebrow = meshGeometry;
+						if(theMesh.type !== "Group"){
+							avatarParts.leftEyebrow = meshGeometry;
+						}else{
+							avatarParts.leftEyebrow = mesh;
+						}
 					}
 					
 					if(mesh.name === "rightEyebrow"){
 						// right eyebrow
 						theMesh.position.set(-3.5,6.5,0);
-						avatarParts.rightEyebrow = meshGeometry;
+						if(theMesh.type !== "Group"){
+							avatarParts.rightEyebrow = meshGeometry;
+						}else{
+							avatarParts.rightEyebrow = mesh;
+						}
 					}
 					
 					if(mesh.name === "mouth"){
 						// mouth
 						theMesh.position.set(0,-4.2,0);
-						avatarParts.mouth = mesh; //meshGeometry;
+						avatarParts.mouth = mesh;
 					}
 					
 					count++;
