@@ -177,25 +177,28 @@
 					// so the coord closest to the top of the line going down the nose)
 					// and the leftmost coord of the right eyebrow and comparing distance between the coord
 					// at the top of the nose can help
-					
 					let middle = landmarkData[27];
 					let left = landmarkData[21];
+					let dist = getDistance(left, middle);
 					map['leftEyebrow'] = {
 						'dist': {
-							'baseline': getDistance(left, middle),
+							'baseline': dist,
 							'previous': 0
-						}
+						},
+						'interpolate': createInterpolation(dist, 0.0, dist/2, 0.5) // this causes an inverse relationship between X and Y!
 					}
 				}
 				
 				if(part === "rightEyebrow"){
 					let middle = landmarkData[27];
 					let right = landmarkData[22];
+					let dist = getDistance(right, middle);
 					map['rightEyebrow'] = {
 						'dist': {
-							'baseline': getDistance(right, middle),
+							'baseline': dist,
 							'previous': 0
-						}
+						},
+						'interpolate': createInterpolation(dist, 0.0, dist/2, 0.5)
 					}
 				}
 				
@@ -415,6 +418,14 @@
 			return val;
 		}
 		
+		// create a function that gets the interpolated y-value given an x for a specific 
+		// range (given by x1,y1 and x2,y2)
+		function createInterpolation(x1, y1, x2, y2){
+			return function(newX){
+				return y1 + (newX - x1)*((y2-y1)/(x2-x1));
+			}
+		}
+		
 		function handleMouthMovement(mapping, landmark_data, avatarParts){
 			let mouthVertical = mapping['mouth'].vertical;
 			let mouthHorizontal = mapping['mouth'].horizontal;
@@ -520,7 +531,7 @@
 			
 			let left = mapping.leftEyebrow.dist;
 			let right = mapping.rightEyebrow.dist;
-			let minDelta = 2.2;
+			let minDelta = .3;
 			
 			let leftPrev = left.previous === 0 ? left.baseline : left.previous;
 			let rightPrev = right.previous === 0 ? right.baseline : right.previous;
@@ -536,7 +547,7 @@
 			
 			// hmmmm https://github.com/davisking/dlib/issues/1658
 			// forget the eyebrow raising for now
-			let deltaLeft = currDistLeft - leftPrev;
+			let deltaLeft = currDistLeft - left.baseline; //leftPrev;
 			/*
 			if(Math.abs(deltaLeft) > minDelta && currDistLeft >= left.baseline){
 				let newVal = deltaLeft / 3;
@@ -545,7 +556,8 @@
 				mapping.leftEyebrow.dist.previous = currDistLeft;
 			}*/
 			
-			let deltaRight = currDistRight - rightPrev;
+			let deltaRight = currDistRight - right.baseline; //rightPrev;
+			
 			/*
 			if(Math.abs(deltaRight) > minDelta && currDistRight >= right.baseline){
 				let newVal = deltaRight / 3;
@@ -555,22 +567,25 @@
 			}*/
 			
 			// eyebrow down
+			// note that I don't think we actually need to remember the previous distance amount. just using the baseline may be enough
+			// with some interpolation. seems to work ok so far :)
 			if(Math.abs(deltaLeft) > minDelta){
 				// we need to move the eyebrow down
-				let newVal = deltaLeft;
+				let newVal = mapping.leftEyebrow.interpolate(currDistLeft); //mapping.leftEyebrow.interpolate(deltaLeft);
+				//console.log(newVal);
 				let oldMorphVal = avatarParts.leftEyebrow.morphTargetInfluences[1];
 				
 				// subtract because a decrease in distance == negative number, and we need to increase morph influence when distance decreases
-				avatarParts.leftEyebrow.morphTargetInfluences[1] = clamp(oldMorphVal - newVal, 0.0, 1.0); // eyebrow down
+				avatarParts.leftEyebrow.morphTargetInfluences[1] = clamp(oldMorphVal + newVal, 0, 1); //oldMorphVal - newVal, 0.0, 1.0); // eyebrow down
 				mapping.leftEyebrow.dist.previous = currDistLeft;
 			}
 			
 			if(Math.abs(deltaRight) > minDelta){
 				// we need to move the eyebrow down
-				let newVal = deltaRight;
+				let newVal = mapping.rightEyebrow.interpolate(currDistRight); //mapping.rightEyebrow.interpolate(deltaRight);
 				let oldMorphVal = avatarParts.rightEyebrow.morphTargetInfluences[1];
 				
-				avatarParts.rightEyebrow.morphTargetInfluences[1] = clamp(oldMorphVal - newVal, 0.0, 1.0); // eyebrow down
+				avatarParts.rightEyebrow.morphTargetInfluences[1] = clamp(oldMorphVal + newVal, 0, 1);//oldMorphVal - newVal, 0.0, 1.0); // eyebrow down
 				mapping.rightEyebrow.dist.previous = currDistRight;
 			}
 		}

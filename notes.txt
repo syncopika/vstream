@@ -98,3 +98,6 @@ to load those joined meshes twice using the plane name (i.e. Plane.002 and Plane
 nevermind, no bug in the loader. the implementation is actually, I think, pretty good. the loader sees that my mesh has 2 materials and is able to split that mesh into the
 corresponding meshes for each material and groups them into a group, with the group being the name of the mesh named in Blender. So basically the expected mesh becomes
 a group when imported. 
+
+8/15/20
+experimented with interpolation and seems to work fairly well for the eyebrows! and I don't need to keep track of a prev value in this case. but need to do more testing. :D
