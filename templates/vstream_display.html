@@ -56,6 +56,7 @@
 		/* notes 
 		
 			oooh this looks good: https://github.com/auduno/clmtrackr
+			this too: https://github.com/auduno/headtrackr
 		
 			potentially useful resources (mostly about morphing, but the warping step I think is really what we want):
 			https://www.cs.toronto.edu/~mangas/teaching/320/slides/CSC320T12.pdf
@@ -74,8 +75,6 @@
 		
 		// maybe instead of anchor points, we just save all the points of the previous frame to compare with. :>
 		// let's use landmark coordinate number 27 and 30 (that's part of the nose)
-		//let anchorPoint = null; // should be a map with just x and y as keys, i.e. {'x': 0, 'y': 0}
-		//let anchorPoint2 = null; // use this point to create a 'normal' vector with anchorPoint.
 		let lastJawEndptDist = null;
 		let rightJawEnd = null;
 		let leftJawEnd = null;
@@ -83,18 +82,7 @@
 		let prevAnchor = null;
 		let currAnchor = null;
 		
-		const mapping = {};
-		
-		const baselineMouthCalibration = {
-			"top2d": {}, // x,y coord
-			"bottom2d": {},
-			"left2d": {}, // left corner 
-			"right2d": {},
-			"dist2d": 0, // distance between the top and bottom pts for the 2d canvas (landmark pts)
-			"left3d": {},
-			"right3d": {}
-			//"dist3d": 0 // distance between the top and bottom pts for the model
-		};
+		const mapping = {}; // mapping important meshes to some info (i.e. baseline info)
 		
 		function toggleStream(){
 			streamPaused = !streamPaused;
@@ -124,26 +112,33 @@
 		function calibrateBaseline(landmarkData, map){
 
 			// map points from landmark coords to face meshes
-			
+			// this mapping thing should be configurable via a json file the user can import? 
+			// 'cause models can be different
+			// stuff like interpolation parameters should be configurable too 
 			for(let part in avatarParts){
 			
 				if(part === "mouth"){
 					// let's only care about the mouth corners and one top/bottom vert
 					let top = landmarkData[62];
 					let bottom = landmarkData[66];
+					let vertDist = getDistance(top, bottom);
 
 					let leftMouthCorner = landmarkData[60];
 					let rightMouthCorner = landmarkData[64];
+					let horzDist = getDistance(leftMouthCorner, rightMouthCorner);
 					
 					// record the distance between the bottom and top most mouth vertices
 					map['mouth'] = {
 						'vertical': {
-							'baseline': getDistance(top, bottom),
-							'previous': 0
+							'baseline': vertDist,
+							'previous': 0,
+							'interpolate': createInterpolation(vertDist, 0.0, vertDist*3, 1.0) // when vert dist increases, morph influence also increases
+																							   // note that the parameters here can determine the 'sensitivity' of the morph
 						},
 						'horizontal': {
-							'baseline': getDistance(leftMouthCorner, rightMouthCorner),
-							'previous': 0
+							'baseline': horzDist,
+							'previous': 0,
+							'interpolate': createInterpolation(horzDist, 0.0, horzDist*3, 1.0)
 						}
 					}
 				}
@@ -185,7 +180,7 @@
 							'baseline': dist,
 							'previous': 0
 						},
-						'interpolate': createInterpolation(dist, 0.0, dist/2, 0.5) // this causes an inverse relationship between X and Y!
+						'interpolate': createInterpolation(dist, 0.0, dist/2, 1) // this causes an inverse relationship between X and Y!
 					}
 				}
 				
@@ -198,18 +193,15 @@
 							'baseline': dist,
 							'previous': 0
 						},
-						'interpolate': createInterpolation(dist, 0.0, dist/2, 0.5)
+						'interpolate': createInterpolation(dist, 0.0, dist/2, 1)
 					}
 				}
 				
 				if(part === "head"){
 					// jaw technically?
 				}
-			
 			}
-			
-			
-			
+
 		}
 		
 		// pass in x and y coords from 2d space
@@ -325,8 +317,11 @@
 		// https://discourse.threejs.org/t/solved-glb-model-is-very-dark/6258
 		// should always use a hemisphere light!
 		var hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
-		hemiLight.position.set(0, 200, 0);
+		hemiLight.position.set(0, 200, -5);
 		scene.add(hemiLight);
+	
+		var light = new THREE.AmbientLight(0x404040);
+		scene.add(light);
 		
 		// basic_avatar_head-edit3.gltf is experimenting with a different kind of mesh setup for the eye.
 		// basic_avatar_head-edit2.gltf is the most up-to-date non-experimental
@@ -444,30 +439,34 @@
 			let currDistVert = getDistance(top2d, bottom2d);
 			let currDistHorz = getDistance(leftMouthCorner, rightMouthCorner);
 			
-			// to minimize tiny fluctuations, set a minimum distance to be achieved before mouth movement is allowed 
-			if(Math.abs(currDistVert - lastVert) <= 2.0){
-				return;
+			// try to prevent jittering
+			if(Math.abs(currDistVert - lastVert) < 0.8){
+				return; // don't move mouth for small changes
 			}
 			
-			let deltaVert = (currDistVert - lastVert) / 8;
-			let deltaHorz = (currDistHorz - lastHorz) / 8;
+			let minDeltaVert = 0.3;
+			let minDeltaHorz = 0.3;
+			let deltaVert = currDistVert - mouthVertical.baseline;
+			let deltaHorz = currDistHorz - mouthHorizontal.baseline;
 			
-			let currMouthVertical = avatarParts.mouth.morphTargetInfluences[0]; // control vertical movement of mouth 
-			let currMouthHorizontal = avatarParts.mouth.morphTargetInfluences[2]; // control horizontal movement of mouth corners
-			
-			currMouthVertical = clamp(currMouthVertical + deltaVert, 0.0, 1.0); // clamp (make a function for this?)
-			avatarParts.mouth.morphTargetInfluences[0] = currMouthVertical;
-			mapping['mouth'].vertical.previous = currDistVert; // update previous with curr distance 
+
+			if(Math.abs(deltaVert) > minDeltaVert){
+				let newVal = mapping.mouth.vertical.interpolate(currDistVert);
+				avatarParts.mouth.morphTargetInfluences[0] = clamp(newVal, 0, 1); //oldMorphVal - newVal, 0.0, 1.0); // eyebrow down
+				mapping.mouth.vertical.previous = currDistVert;
+			}
 			
 			// work on moving the ends of the mouth along the x axis as well!
 			// got shape keys! this is easy. just figure out the change in distance between the 2 mouth corners. yay
-			currMouthHorizontal = clamp(currMouthHorizontal + deltaHorz, 0.0, 1.0);
-			avatarParts.mouth.morphTargetInfluences[2] = currMouthHorizontal;
-			mapping['mouth'].horizontal.previous = currDistHorz;
+			if(Math.abs(deltaHorz) > minDeltaHorz){
+				let newVal = mapping.mouth.horizontal.interpolate(currDistHorz);
+				avatarParts.mouth.morphTargetInfluences[2] = clamp(newVal, 0, 1); //oldMorphVal - newVal, 0.0, 1.0); // eyebrow down
+				mapping.mouth.horizontal.previous = currDistHorz;
+			}
 			
 			// support o mouth movement (i.e. forming an o)
 			// make sure we have some horizontal movement and vertical movement
-			if(currDistHorz < mouthHorizontal.baseline - 2.0 && currMouthVertical > 0.3){
+			if(currDistHorz < mouthHorizontal.baseline - 2.0 && avatarParts.mouth.morphTargetInfluences[0] > 0.5){
 				// let's say baseline - 5.0 === maximum o mouth influence.
 				// max influence == 1, no influence == 0
 				// interpolation time 
@@ -486,7 +485,6 @@
 			
 			// also, big note! the eyes are actually groups with 2 meshes each!!
 			// so we need to target the morphInfluence of the children!
-			
 			
 			let leftEyeVertical = mapping['leftEye'].vertical;
 			let rightEyeVertical = mapping['rightEye'].vertical;
@@ -523,69 +521,41 @@
 		}
 		
 		
-		function handleEyebrowMovement(mapping, landmark_data, avatarParts){
-			// it might be more accurate to check the distance between the left and right ends of the right and left eyebrows, respectively,
-			// that way we can move both eyebrows in sync (which is usually the case?)
-			// a little bit trickier to handle both individually it seems, also because of the constant jittering of the facial landmarks 
-			// perhaps that can be controlled by checking previous landmark coord locations. if it's only changing by a tiny amount, don't update?
-			
+		function handleEyebrowMovement(mapping, landmark_data, avatarParts){		
 			let left = mapping.leftEyebrow.dist;
 			let right = mapping.rightEyebrow.dist;
-			let minDelta = .3;
+			let minDelta = 1.0;
 			
 			let leftPrev = left.previous === 0 ? left.baseline : left.previous;
 			let rightPrev = right.previous === 0 ? right.baseline : right.previous;
-			//console.log("leftPrev: " + leftPrev);
-			//console.log("rightPrev: " + rightPrev);
 			
 			let currDistLeft = getDistance(landmark_data[21], landmark_data[27]);
 			let currDistRight = getDistance(landmark_data[22], landmark_data[27]);
 			
-			//console.log("currDistLeft: " + currDistLeft);
-			//console.log("currDistRight: " + currDistRight);
-			//console.log("------------------------------")
 			
 			// hmmmm https://github.com/davisking/dlib/issues/1658
 			// forget the eyebrow raising for now
-			let deltaLeft = currDistLeft - left.baseline; //leftPrev;
-			/*
-			if(Math.abs(deltaLeft) > minDelta && currDistLeft >= left.baseline){
-				let newVal = deltaLeft / 3;
-				let oldMorphVal = avatarParts.leftEyebrow.morphTargetInfluences[0];
-				avatarParts.leftEyebrow.morphTargetInfluences[0] = clamp(oldMorphVal + newVal, 0.0, 1.0); // eyebrow up
-				mapping.leftEyebrow.dist.previous = currDistLeft;
-			}*/
-			
-			let deltaRight = currDistRight - right.baseline; //rightPrev;
-			
-			/*
-			if(Math.abs(deltaRight) > minDelta && currDistRight >= right.baseline){
-				let newVal = deltaRight / 3;
-				let oldMorphVal = avatarParts.rightEyebrow.morphTargetInfluences[0];
-				avatarParts.rightEyebrow.morphTargetInfluences[0] = clamp(oldMorphVal + newVal, 0.0, 1.0); // eyebrow up
-				mapping.rightEyebrow.dist.previous = currDistRight;
-			}*/
+			let deltaLeft = currDistLeft - left.baseline;
+			let deltaRight = currDistRight - right.baseline;
 			
 			// eyebrow down
 			// note that I don't think we actually need to remember the previous distance amount. just using the baseline may be enough
 			// with some interpolation. seems to work ok so far :)
 			if(Math.abs(deltaLeft) > minDelta){
 				// we need to move the eyebrow down
-				let newVal = mapping.leftEyebrow.interpolate(currDistLeft); //mapping.leftEyebrow.interpolate(deltaLeft);
-				//console.log(newVal);
+				let newVal = mapping.leftEyebrow.interpolate(currDistLeft);
 				let oldMorphVal = avatarParts.leftEyebrow.morphTargetInfluences[1];
 				
-				// subtract because a decrease in distance == negative number, and we need to increase morph influence when distance decreases
-				avatarParts.leftEyebrow.morphTargetInfluences[1] = clamp(oldMorphVal + newVal, 0, 1); //oldMorphVal - newVal, 0.0, 1.0); // eyebrow down
+				avatarParts.leftEyebrow.morphTargetInfluences[1] = clamp(newVal, 0, 1);
 				mapping.leftEyebrow.dist.previous = currDistLeft;
 			}
 			
 			if(Math.abs(deltaRight) > minDelta){
 				// we need to move the eyebrow down
-				let newVal = mapping.rightEyebrow.interpolate(currDistRight); //mapping.rightEyebrow.interpolate(deltaRight);
+				let newVal = mapping.rightEyebrow.interpolate(currDistRight);
 				let oldMorphVal = avatarParts.rightEyebrow.morphTargetInfluences[1];
 				
-				avatarParts.rightEyebrow.morphTargetInfluences[1] = clamp(oldMorphVal + newVal, 0, 1);//oldMorphVal - newVal, 0.0, 1.0); // eyebrow down
+				avatarParts.rightEyebrow.morphTargetInfluences[1] = clamp(newVal, 0, 1);
 				mapping.rightEyebrow.dist.previous = currDistRight;
 			}
 		}
@@ -639,26 +609,6 @@
 		
 		let prevCoordPositions = {};
 		
-		function updatePositions(data, positions){
-			for(let i = 0; i < data.length; i++){
-				positions[i] = data[i];
-			};
-		}
-		
-		function comparePositions(data, positions){
-			for(let i = 0; i < data.length; i++){
-				let prev = positions[i];
-				let curr = data[i]
-				let dist = getDistance(prev, curr);
-				if(dist < 0.5 || dist > 20.0){
-					// limit the amount a coord can move to try to prevent annoying jittering effects
-					return false;
-				}
-			}
-			updatePositions(data, positions);
-			return true;
-		}
-		
 		// handle receiving facial landmark coordinate data 
 		socket.on('landmarkCoordinates', (data) => {
 			let landmark_data = JSON.parse(data);
@@ -671,18 +621,6 @@
 					prevAnchor = landmark_data[27];
 					calibrateBaseline(landmark_data, mapping); // mapping defined above as empty dictionary
 				}
-				
-				/*///// try to prevent jittering effects of landmark coords
-				if(Object.keys(prevCoordPositions).length === 0){
-					for(let i = 0; i < landmark_data.length; i++){
-						prevCoordPositions[i] = landmark_data[i];
-					}
-					let canvas = document.getElementById("display");
-					let context = canvas.getContext("2d");
-					updateCanvas(landmark_data, context);
-				}else{
-					if(comparePositions(landmark_data, prevCoordPositions)){
-				*/
 			
 				rightJawEnd = landmark_data[0];
 				leftJawEnd = landmark_data[16];
