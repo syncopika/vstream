@@ -254,7 +254,7 @@
 										child.parent.scale.y = child.parent.scale.y * 5;
 										child.parent.scale.z = child.parent.scale.z * 5;
 										faceParts.push(child.parent);
-										console.log(child.parent);
+										//console.log(child.parent);
 										seen.add(child.parent.name);
 									}
 								}else{
@@ -325,7 +325,7 @@
 		
 		// basic_avatar_head-edit3.gltf is experimenting with a different kind of mesh setup for the eye.
 		// basic_avatar_head-edit2.gltf is the most up-to-date non-experimental
-		loadedModels.push(getModel('../static/basic_avatar_head-edit4.1.gltf', 'avatar'));
+		loadedModels.push(getModel('../static/basic_avatar_head-edit5.gltf', 'avatar'));
 
 		Promise.all(loadedModels).then((objects) => {
 			objects.forEach((meshList) => {
@@ -349,38 +349,38 @@
 				
 					bgAxesHelper = new THREE.AxesHelper(10);
 					group.add(bgAxesHelper);
-					//mesh.position.set(0,0,0);
 					
 					let theMesh = showWireframe ? line : mesh;
 					let meshGeometry = showWireframe ? line.geometry : mesh;  // kinda misleading...
 					
 					if(mesh.name === "head"){
 						// the head 
+						// note that for the current avatar, the head mesh controls blinking!!
 						avatarParts.head = meshGeometry;
 					}
 					
 					// loading the meshes is not always in the same order!!!
 					if(mesh.name === "rightEye"){
 						// right eye
-						theMesh.position.set(-3.5,3,0);
-						avatarParts.rightEye = meshGeometry.children[1]; 
+						theMesh.position.set(-3.5,2,0);
+						avatarParts.rightEye = meshGeometry; 
 					}
 					
 					if(mesh.name === "leftEye"){
 						// left eye
-						theMesh.position.set(3.5,3,0);
-						avatarParts.leftEye = meshGeometry.children[1];
+						theMesh.position.set(3.5,2,0);
+						avatarParts.leftEye = meshGeometry;
 					}
 					
 					if(mesh.name === "leftEyebrow"){
 						// left eyebrow
-						theMesh.position.set(3.5,6.5,0);
+						theMesh.position.set(3.5,4.5,0);
 						avatarParts.leftEyebrow = meshGeometry;
 					}
 					
 					if(mesh.name === "rightEyebrow"){
 						// right eyebrow
-						theMesh.position.set(-3.5,6.5,0);
+						theMesh.position.set(-3.5,4.5,0);
 						avatarParts.rightEyebrow = meshGeometry;
 					}
 					
@@ -393,7 +393,6 @@
 					count++;
 					
 					if(count === 6){
-						//mesh.castShadow = true;
 						console.log(avatarParts);
 						group.position.set(0,0,0);
 						avatar = group;
@@ -440,7 +439,7 @@
 			let currDistHorz = getDistance(leftMouthCorner, rightMouthCorner);
 			
 			// try to prevent jittering
-			if(Math.abs(currDistVert - lastVert) < 0.8){
+			if(Math.abs(currDistVert - lastVert) < 1.1){
 				return; // don't move mouth for small changes
 			}
 			
@@ -452,7 +451,7 @@
 
 			if(Math.abs(deltaVert) > minDeltaVert){
 				let newVal = mapping.mouth.vertical.interpolate(currDistVert);
-				avatarParts.mouth.morphTargetInfluences[0] = clamp(newVal, 0, 1); //oldMorphVal - newVal, 0.0, 1.0); // eyebrow down
+				avatarParts.mouth.morphTargetInfluences[0] = clamp(newVal, 0, 1);
 				mapping.mouth.vertical.previous = currDistVert;
 			}
 			
@@ -460,25 +459,29 @@
 			// got shape keys! this is easy. just figure out the change in distance between the 2 mouth corners. yay
 			if(Math.abs(deltaHorz) > minDeltaHorz){
 				let newVal = mapping.mouth.horizontal.interpolate(currDistHorz);
-				avatarParts.mouth.morphTargetInfluences[2] = clamp(newVal, 0, 1); //oldMorphVal - newVal, 0.0, 1.0); // eyebrow down
+				avatarParts.mouth.morphTargetInfluences[2] = clamp(newVal, 0, 1);
 				mapping.mouth.horizontal.previous = currDistHorz;
 			}
 			
 			// support o mouth movement (i.e. forming an o)
 			// make sure we have some horizontal movement and vertical movement
-			if(currDistHorz < mouthHorizontal.baseline - 2.0 && avatarParts.mouth.morphTargetInfluences[0] > 0.5){
+			if(currDistHorz <= mouthHorizontal.baseline - 2 && avatarParts.mouth.morphTargetInfluences[0] > 0.5){
 				// let's say baseline - 5.0 === maximum o mouth influence.
 				// max influence == 1, no influence == 0
 				// interpolation time 
-				let max = mouthHorizontal.baseline - 5.0; // the distance at which the o mouth will have maximum influence
+				let max = mouthHorizontal.baseline - 3; // the distance at which the o mouth will have maximum influence
 				let currVal = Math.min(currDistHorz / max, max);
-				avatarParts.mouth.morphTargetInfluences[1] = currVal;
+				avatarParts.mouth.morphTargetInfluences[1] = clamp(currVal, 0, 1);
 			}else{
 				avatarParts.mouth.morphTargetInfluences[1] = 0;
 			}
 		}
 		
 		function handleEyeMovement(mapping, landmark_data, avatarParts){
+			// this is actually controlling blinking! the head mesh has the morph targets for this.
+			// but we can store info about the eye coords in their respective mappings but just make sure to 
+			// affect the head's morph targets
+			
 			// ok so I made this a bit confusing, sorry -__-
 			// the shape key is closeEye so the larger the morph influence value, the more closed the eye gets.
 			// so 1.0 == closed eye, 0.0 == open eye. :/
@@ -500,22 +503,22 @@
 			let deltaVertLeft = (currDistVertLeft - lastVertLeft);
 			if(Math.abs(deltaVertLeft) > minDelta){
 				deltaVertLeft /= 3;
-				let currEyeLeft = avatarParts.leftEye.morphTargetInfluences[0];
+				let currEyeLeft = avatarParts.head.morphTargetInfluences[0];
 				
 				currEyeLeft = clamp(currEyeLeft - deltaVertLeft, 0.0, 1.0); // if the eye is closing, deltaVertLeft should be a negative value (thus adding to currEyeLeft)
 				
-				avatarParts.leftEye.morphTargetInfluences[0] = currEyeLeft;
+				avatarParts.head.morphTargetInfluences[0] = currEyeLeft;
 				mapping['leftEye'].vertical.previous = currDistVertLeft;
 			}
 			
 			let deltaVertRight = (currDistVertRight - lastVertRight);
 			if(Math.abs(deltaVertRight) > minDelta){
 				deltaVertRight /= 3;
-				let currEyeRight = avatarParts.rightEye.morphTargetInfluences[0];
+				let currEyeRight = avatarParts.head.morphTargetInfluences[1];
 				
 				currEyeRight = clamp(currEyeRight - deltaVertRight, 0.0, 1.0);
 				
-				avatarParts.rightEye.morphTargetInfluences[0] = currEyeRight;
+				avatarParts.head.morphTargetInfluences[1] = currEyeRight;
 				mapping['rightEye'].vertical.previous = currDistVertRight;
 			}
 		}
