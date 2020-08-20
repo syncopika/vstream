@@ -1,0 +1,100 @@
+  <html>
+
+	<head>
+		<title>vstream display</title>
+		<script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/2.2.0/socket.io.js" integrity="sha256-yr4fRk/GU1ehYJPAs8P4JlTgu0Hdsp4ZKrx8bDEDC3I=" crossorigin="anonymous"></script>
+	</head>
+	
+	<style>
+		#main{
+			font-family: monospace;
+			text-align: center;
+			top: 5%;
+			position: relative;
+			display: block;
+		}
+		#display{
+			border: #000 solid 1px;
+		}
+	</style>
+	
+	<body>
+		<div id='main'>
+			<h3> vstream display </h3>
+			
+			<canvas id='display' width='400px' height='400px'>
+			</canvas>
+			
+			<br />
+			<br />
+			
+			<button id='toggleStream'> pause/continue </button>
+			
+		</div>
+	</body>
+
+
+	<script>
+		const socket = io();
+		let streamPaused = false;
+		
+		function toggleStream(){
+			streamPaused = !streamPaused;
+			socket.emit("toggleStream", streamPaused);
+		}
+		
+		document.getElementById("toggleStream").addEventListener("click", (evt) => {
+			console.log("toggling stream...");
+			toggleStream();
+		});
+		
+		// handle receiving facial landmark coordinate data 
+		socket.on('landmarkCoordinates', (data) => {
+			let theData = JSON.parse(data);
+			let landmark_data = theData['landmark_coords'];
+			let pupil_coords = theData['pupil_coords'];
+			let canvas = document.getElementById("display");
+			let context = canvas.getContext("2d");
+			
+			// clear the canvas 
+			context.clearRect(0, 0, 400, 400);
+			
+			// draw on the canvas 
+			landmark_data.forEach((coord) => {
+				context.fillRect(coord.x, coord.y, 2, 2);
+			});
+			
+			// connect the dots
+			// fortunately, the coords should be organized so it's easy to connect the parts
+			// see: https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
+			let coordsToSkip = new Set([16, 21, 26, 35, 41, 47, 67]); // 7 regions === 7 lines to draw
+			for(let i = 0; i < landmark_data.length-1; i++){
+				// do not connect the last coord for each facial region (i.e. mouth, node, jaw, etc.) to anything
+				if(coordsToSkip.has(i)){
+					continue;
+				}
+				let x = landmark_data[i].x;
+				let y = landmark_data[i].y;
+				let x2 = landmark_data[i+1].x;
+				let y2 = landmark_data[i+1].y;
+				context.beginPath();
+				context.moveTo(x, y);
+				context.lineTo(x2, y2);
+				context.stroke();
+			}
+			
+			for(let j = 0; j < pupil_coords.length; j++){
+				let x = pupil_coords[j].x;
+				let y = pupil_coords[j].y;
+				context.fillRect(x, y, 3, 3);
+			}
+			
+			//console.log(landmark_data);
+			//console.log("==========================")
+		});
+		
+	</script>
+
+
+
+</html>
