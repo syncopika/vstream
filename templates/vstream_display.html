@@ -109,7 +109,7 @@
 		}
 		
 		// set the initial nose/anchor point that we can use to figure out when a rotation is happening
-		function calibrateBaseline(landmarkData, map){
+		function calibrateBaseline(landmarkData, pupilData, map){
 
 			// map points from landmark coords to face meshes
 			// this mapping thing should be configurable via a json file the user can import? 
@@ -145,24 +145,31 @@
 				
 				if(part === "leftEye"){
 					let top = landmarkData[38];
-					let bottom = landmarkData[41];
+					//let bottom = landmarkData[41];
+					let right = landmarkData[39]; // the right-most landmark of the left eye
+					let pupil = pupilData[0];
 					
 					map['leftEye'] = {
-						'vertical': {
-							'baseline': getDistance(top, bottom),
-							'previous': 0
+						'baseline': {
+							'lateral': getDistance(pupil, right),
+							'vertical': getDistance(pupil, top)
 						}
+						'previous': 0
 					}
 				}
 				
 				if(part === "rightEye"){
 					let top = landmarkData[44];
-					let bottom = landmarkData[46];
+					//let bottom = landmarkData[46];
+					let right = landmarkData[45];
+					let pupil = pupilData[1];
+					
 					map['rightEye'] = {
-						'vertical': {
-							'baseline': getDistance(top, bottom),
-							'previous': 0
+						'baseline': {
+							'lateral': getDistance(pupil, right),
+							'vertical': getDistance(pupil, top)
 						}
+						'previous': 0
 					}
 				}
 				
@@ -562,16 +569,49 @@
 				mapping.rightEyebrow.dist.previous = currDistRight;
 			}
 		}
+		
+		function handleEyeballMovement(mapping, landmark_data, pupil_data, avatarParts){
+			// each eyeball can move up, down, left, right
+					
+			let leftEyeTop = landmark_data[38];
+			let leftEyeRight = landmark_data[39];
+			let leftEyePupil = pupil_data[0];
+
+			let rightEyeTop = landmark_data[44];
+			let rightEyeRight = landmark_data[45];
+			let rightEyePupil = pupil_data[1];	
+
+			// handle left eye
+			let eyeLeftVertBase = avatarParts.leftEye.baseline.vertical;
+			let eyeLeftLatBase = avatarParts.leftEye.baseline.lateral;
+			let eyeLeftVert = getDistance(leftEyePupil, leftEyeTop);
+			let eyeLeftLat = getDistance(leftEyePupil, leftEyeRight);
+			
+			// if vert > base, interpolate up 
+			// if vert < base..oh wait how do i differentiate between up and down. compare y vals?
+			
+			// if lat > base, interpolate right. compare x vals with base to decide if up or down.
+			
+			// handle right eye
+			let eyeRightVertBase = avatarParts.rightEye.baseline.vertical;
+			let eyeRightLatBase = avatarParts.rightEye.baseline.lateral;
+			let eyeRightVert = getDistance(rightEyePupil, rightEyeTop);
+			let eyeRightLat = getDistance(rightEyePupil, rightEyeRight);
+		}
 	
 		///////////////////////////////////////////////////////////
 		
-		function updateCanvas(landmark_data, context){
+		function updateCanvas(landmark_data, pupil_coords, context){
 			// clear the canvas 
 			context.clearRect(0, 0, 400, 400);
 			
 			// draw on the canvas 
 			landmark_data.forEach((coord) => {
 				context.fillRect(coord.x, coord.y, 2, 2);
+			});
+			
+			pupil_coords.forEach((coord) => {
+				context.fillRect(coord.x, coord.y, 3, 3);
 			});
 			
 			// connect the dots
@@ -614,7 +654,9 @@
 		
 		// handle receiving facial landmark coordinate data 
 		socket.on('landmarkCoordinates', (data) => {
-			let landmark_data = JSON.parse(data);
+			let theData = JSON.parse(data);
+			let landmark_data = theData['landmark_coords'];
+			let pupil_coords = theData['pupil_coords'];
 			
 			if(meshLoaded && landmark_data.length > 0){
 			
@@ -622,7 +664,7 @@
 				if(calibrate){
 					calibrate = !calibrate;
 					prevAnchor = landmark_data[27];
-					calibrateBaseline(landmark_data, mapping); // mapping defined above as empty dictionary
+					calibrateBaseline(landmark_data, pupil_coords, mapping); // mapping defined above as empty dictionary
 				}
 			
 				rightJawEnd = landmark_data[0];
@@ -729,7 +771,7 @@
 				// update canvas with landmark coordinates
 				let canvas = document.getElementById("display");
 				let context = canvas.getContext("2d");
-				updateCanvas(landmark_data, context);
+				updateCanvas(landmark_data, pupil_coords, context);
 
 
 				// update mesh

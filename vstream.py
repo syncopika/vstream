@@ -79,6 +79,60 @@ class VStream(threading.Thread):
 		self.detector = state['detector']
 		self.predictor = state['predictor']
 		
+	def get_pupil_coords(self, gray, shape, coords):
+		# gray - grayscaled image 
+		# shape - the facial landmarks 
+		# coords - the dict to store the estimated pupil coords
+
+		left_eye_l = (int(shape[36][0]), int(shape[36][1]))
+		left_eye_r = (int(shape[39][0]), int(shape[39][1]))
+		left_slope = (left_eye_r[1] - left_eye_l[1]) / (left_eye_r[0] - left_eye_l[0])
+		left_b = left_eye_l[1] - (left_slope * left_eye_l[0]) # y-intercept from y=mx+b
+		
+		right_eye_l = (int(shape[42][0]), int(shape[42][1]))
+		right_eye_r = (int(shape[45][0]), int(shape[45][1]))
+		right_slope = (right_eye_r[1] - right_eye_l[1]) / (right_eye_r[0] - right_eye_l[0])
+		right_b = right_eye_l[1] - (right_slope * right_eye_l[0])
+		
+		# estimate pupil location (given by 1 coord)
+		# as as a separate field in the json output? one field for landmarks, one field for pupils
+		left_start = left_eye_l[0] + 1
+		left_end = left_eye_r[0] - 1
+		max = 0 # we're looking for the peak of intensity given 
+		max_coord = []
+		
+		for i in range(left_start, left_end+1):
+			y = (left_slope * i) + left_b
+			intensity = gray[i, int(y)]
+			
+			if max == 0:
+				max = intensity
+				max_coord = [i, int(y)]
+			else:
+				if intensity > max:
+					max = intensity
+					max_coord = [i, int(y)]
+		
+		max = 0
+		coords['pupil_coords'].append({'x': max_coord[0], 'y': max_coord[1]})
+		
+		right_start = right_eye_l[0] + 1
+		right_end = right_eye_r[0] - 1
+		for i in range(right_start, right_end+1):
+			y = (right_slope * i) + right_b
+			intensity = gray[i, int(y)]
+			
+			if max == 0:
+				max = intensity
+				max_coord = [i, int(y)]
+			else:
+				if intensity > max:
+					max = intensity
+					max_coord = [i, int(y)]
+
+		coords['pupil_coords'].append({'x': max_coord[0], 'y': max_coord[1]})
+	
+		
 	def run(self):
 	
 		while True:
@@ -90,7 +144,7 @@ class VStream(threading.Thread):
 				
 				# collect all the landmark coordinates
 				# should be a list of dictionaries like [{'x': a, 'y': b},...]
-				coords = []
+				coords = {'landmark_coords': [], 'pupil_coords': []}
 				
 				# get the facial landmarks of the faces
 				for face in faces:
@@ -120,11 +174,7 @@ class VStream(threading.Thread):
 					# we need a left coord and a width for left and right eye 
 					# can we index shape?
 					# https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
-					left_eye_left = shape[36]
-					left_eye_right = shape[40]
-					
-					right_eye_left = shape[42] 
-					right_eye_right = shape[45]
+					self.get_pupil_coords(gray, shape, coords)
 					
 					# estimate pupil location (given by 1 coord)
 					# as as a separate field in the json output? one field for landmarks, one field for pupils
@@ -132,18 +182,10 @@ class VStream(threading.Thread):
 					for (x,y) in shape:
 						coords.append({'x': int(x), 'y': int(y)})
 						cv2.circle(frame, (x, y), 1, (255, 0, 0), -1) # BGR format
-						
-				#cv2.imshow("Frame", frame)
-				#cv2.waitKey(1)
 				
 				# send the coords off to the client browser!
 				self.socket.emit('landmarkCoordinates', json.dumps(coords))
-				
-				#key = cv2.waitKey(1) & 0xFF
-				
-				#if key == ord("q"):
-				#	break
-		
+
 		# cleanup		
 		cv2.destroyAllWindows()
 		self.video_stream.stop()
