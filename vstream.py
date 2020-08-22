@@ -180,7 +180,7 @@ class VStream(threading.Thread):
 					# as as a separate field in the json output? one field for landmarks, one field for pupils
 					
 					for (x,y) in shape:
-						coords.append({'x': int(x), 'y': int(y)})
+						coords['landmark_coords'].append({'x': int(x), 'y': int(y)})
 						cv2.circle(frame, (x, y), 1, (255, 0, 0), -1) # BGR format
 				
 				# send the coords off to the client browser!
