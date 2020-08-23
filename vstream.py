@@ -154,6 +154,7 @@ class VStream(threading.Thread):
 					
 					# might be helpful for pupil tracking: 
 					# https://stackoverflow.com/questions/45789549/track-eye-pupil-position-with-webcam-opencv-and-python
+					# this one looks really good: https://subscription.packtpub.com/book/application_development/9781785283932/4/ch04lvl1sec44/detecting-pupils
 					
 					# for pupil tracking:
 					# we know the landmark coord indices that match the eyes 

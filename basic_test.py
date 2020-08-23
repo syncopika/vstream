@@ -12,6 +12,7 @@ import logging
 import atexit
 import json
 import threading
+import math
 
 logging.basicConfig(level=logging.INFO)
 
@@ -47,7 +48,7 @@ class VStream(threading.Thread):
 		self.detector = state['detector']
 		self.predictor = state['predictor']
 		
-	def get_pupil_coords(self, gray, shape, coords):
+	def get_pupil_coords_old(self, gray, shape, coords):
 		# gray - grayscaled image 
 		# shape - the facial landmarks 
 		# coords - the dict to store the estimated pupil coords
@@ -107,6 +108,36 @@ class VStream(threading.Thread):
 		#print("======================")
 		coords['pupil_coords'].append({'x': max_coord[0], 'y': max_coord[1]})
 		
+	def get_pupil_coords(self, gray, shape, coords):
+		# https://subscription.packtpub.com/book/application_development/9781785283932/4/ch04lvl1sec44/detecting-pupils
+		# https://medium.com/@stepanfilonov/tracking-your-eyes-with-python-3952e66194a6
+		#thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 51, 2)
+		ret, thresh = cv2.threshold(gray, 179, 255, cv2.THRESH_BINARY)
+		contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+		
+		for contour in contours:
+			print("got a contour!")
+			area = cv2.contourArea(contour)
+			rect = cv2.boundingRect(contour)
+			x, y, width, height = rect
+			radius = 0.25 * (width + height) # why is this? contour may not be a circle (i.e. elliptical)
+			
+			print(f"area of contour: {area}")
+			print(f"width of contour: {width}")
+			print(f"height of contour: {height}")
+			print(f"radius of contour: {radius}")
+			
+			area_condition = (100 <= area <= 200) # this should correspond with the window size of the image stream?
+			is_symmetrical = (abs(1 - float(width)/float(height)) <= 0.2)
+			is_filled = (abs(1 - (area / (math.pi * math.pow(radius, 2)))) <= 0.3)
+			
+			if True: #area_condition and is_symmetrical and is_filled:
+				# expecting only 2 contours!
+				coords['pupil_coords'].append({'x': int(x+radius), 'y': int(y+radius)})
+		
+		print("--------------------")
+	
+	
 	def run(self):
 	
 		while True:
@@ -149,7 +180,9 @@ class VStream(threading.Thread):
 					# we need a left coord and a width for left and right eye 
 					# can we index shape?
 					# https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
-					self.get_pupil_coords(gray, shape, coords)
+					scale_factor = 0.7
+					resized_gray = cv2.resize(gray, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
+					self.get_pupil_coords(resized_gray, shape, coords)
 					
 					for (x,y) in shape:
 						coords['landmark_coords'].append({'x': int(x), 'y': int(y)})

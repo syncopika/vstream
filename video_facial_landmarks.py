@@ -38,6 +38,7 @@ import imutils
 import time
 import dlib
 import cv2
+import math
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-p", "--shape-predictor", required=True, help="path to facial landmark predictor")
@@ -48,22 +49,141 @@ detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor(args["shape_predictor"])
 
 print("setting up camera sensor...")
-vs = VideoStream(usePiCamera=False).start()
-time.sleep(2.0)
+#vs = VideoStream(usePiCamera=False).start()
+#time.sleep(2.0)
+
+# https://medium.com/@stepanfilonov/tracking-your-eyes-with-python-3952e66194a6
+detector_params = cv2.SimpleBlobDetector_Params()
+detector_params.filterByArea = True
+detector_params.maxArea = 1500
+eye_detector = cv2.SimpleBlobDetector_create(detector_params)
+
+def func():
+	pass
+
+
+vs = cv2.VideoCapture(0)
+cv2.namedWindow('Frame')	
+cv2.createTrackbar('threshold', 'Frame', 0, 255, func)
 
 while True:
-	frame = vs.read()
+	#frame = vs.read()
+	ret, frame = vs.read()
 	frame = imutils.resize(frame, width=400)
 	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 	faces = detector(gray, 0)
+	
+	"""
+	### pupil detection stuff 
+	ret, thresh = cv2.threshold(gray, 40, 255, cv2.THRESH_BINARY) # 2nd arg depends on lighting?
+	contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
+	
+	for contour in contours:
+		area = cv2.contourArea(contour)
+		rect = cv2.boundingRect(contour)
+		x, y, width, height = rect
+		radius = 0.25 * (width + height) # why is this? contour may not be a circle (i.e. elliptical)
+		
+		print(f"area of contour: {area}")
+		print(f"width of contour: {width}")
+		print(f"height of contour: {height}")
+		print(f"radius of contour: {radius}")
+		
+		area_condition = (80 <= area <= 200)
+		is_symmetrical = (abs(1 - float(width)/float(height)) <= 0.2)
+		is_filled = (abs(1 - (area / (math.pi * math.pow(radius, 2)))) <= 0.3)
+		
+		if area_condition and is_symmetrical and is_filled:
+			cv2.circle(frame, (int(x+radius), int(y+radius)), int(1.2*radius), (255,180,0), -1)
+	
+	### end pupil detection stuff
+	"""
+	
 	
 	# get the facial landmarks of the faces
 	for face in faces:
 		shape = predictor(gray, face) # can we separate the shapes in the face?
 		shape = face_utils.shape_to_np(shape)
 		
+		left_eye = {'minX': 0, 'maxX': 0, 'maxY': 0, 'minY': 0} # top/bottom y values are the vertical boundaries, left/right x values are the horizontal bounds
+		right_eye = {'minX': 0, 'maxX': 0, 'maxY': 0, 'minY': 0} 
+		index = 0
+		
 		for (x,y) in shape:
-			cv2.circle(frame, (x, y), 5, (255, 0, 0), -1) #BGR format
+		
+			# get info on eyes
+			if index in [36, 39, 37, 41]:
+				# left eye coords 
+				xCoord = int(x)
+				yCoord = int(y)
+				
+				if left_eye['minX'] == 0:
+					left_eye['minX'] = xCoord
+				else:
+					left_eye['minX'] = min(xCoord, left_eye['minX'])
+				
+				if left_eye['minY'] == 0:
+					left_eye['minY'] = yCoord
+				else:
+					left_eye['minY'] = min(yCoord, left_eye['minY'])
+				
+				left_eye['maxX'] = max(xCoord, left_eye['maxX'])
+				left_eye['maxY'] = max(yCoord, left_eye['maxY'])
+				
+			elif index in [42, 45, 43, 47]:
+				# right eye coords
+				xCoord = int(x)
+				yCoord = int(y)
+				
+				if right_eye['minX'] == 0:
+					right_eye['minX'] = xCoord
+				else:
+					right_eye['minX'] = min(xCoord, right_eye['minX'])
+				
+				if right_eye['minY'] == 0:
+					right_eye['minY'] = yCoord
+				else:
+					right_eye['minY'] = min(yCoord, right_eye['minY'])
+				
+				right_eye['maxX'] = max(xCoord, right_eye['maxX'])
+				right_eye['maxY'] = max(yCoord, right_eye['maxY'])
+
+			index += 1
+			
+
+			# make a dot for the landmark coord
+			#cv2.circle(frame, (x, y), 3, (255, 0, 0), -1) #BGR format
+		
+		# draw in pupils with eye info
+		offset = 10
+		for eye in [left_eye, right_eye]:
+			# get the region-of-interest (ROI) based on eye info
+			width = eye['maxX'] - eye['minX'] + offset
+			height = eye['maxY'] - eye['minY'] + offset
+			
+			y = eye['minY'] - int(offset/2)
+			x = eye['minX']
+			
+			print(eye)
+			print(f"y: {y}")
+			print(f"x: {x}")
+			
+			# https://stackoverflow.com/questions/9084609/how-to-copy-a-image-region-using-opencv-in-python
+			roi = gray[y:(y+height), x:(x+width)]
+			cv2.rectangle(frame, (x, y), (x+width, y+height), (0,0,255), 1);
+			
+			#print(roi)
+			threshold = cv2.getTrackbarPos('threshold', 'Frame')
+			#print(threshold)
+			ret, img = cv2.threshold(roi, threshold, 255, cv2.THRESH_BINARY)
+			#img = cv2.erode(img, None, iterations=2)
+			#img = cv2.dilate(img, None, iterations=4)
+			img = cv2.medianBlur(img, 7)
+			keypoints = eye_detector.detect(img)
+			print(keypoints)
+			
+			original = frame[y:y+height, x:x+width]
+			cv2.drawKeypoints(original, keypoints, original, (255,180,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 			
 	cv2.imshow("Frame", frame)
 	key = cv2.waitKey(1) & 0xFF
