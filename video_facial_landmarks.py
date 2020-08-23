@@ -73,33 +73,6 @@ while True:
 	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 	faces = detector(gray, 0)
 	
-	"""
-	### pupil detection stuff 
-	ret, thresh = cv2.threshold(gray, 40, 255, cv2.THRESH_BINARY) # 2nd arg depends on lighting?
-	contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_NONE)
-	
-	for contour in contours:
-		area = cv2.contourArea(contour)
-		rect = cv2.boundingRect(contour)
-		x, y, width, height = rect
-		radius = 0.25 * (width + height) # why is this? contour may not be a circle (i.e. elliptical)
-		
-		print(f"area of contour: {area}")
-		print(f"width of contour: {width}")
-		print(f"height of contour: {height}")
-		print(f"radius of contour: {radius}")
-		
-		area_condition = (80 <= area <= 200)
-		is_symmetrical = (abs(1 - float(width)/float(height)) <= 0.2)
-		is_filled = (abs(1 - (area / (math.pi * math.pow(radius, 2)))) <= 0.3)
-		
-		if area_condition and is_symmetrical and is_filled:
-			cv2.circle(frame, (int(x+radius), int(y+radius)), int(1.2*radius), (255,180,0), -1)
-	
-	### end pupil detection stuff
-	"""
-	
-	
 	# get the facial landmarks of the faces
 	for face in faces:
 		shape = predictor(gray, face) # can we separate the shapes in the face?
@@ -172,18 +145,21 @@ while True:
 			roi = gray[y:(y+height), x:(x+width)]
 			cv2.rectangle(frame, (x, y), (x+width, y+height), (0,0,255), 1);
 			
-			#print(roi)
 			threshold = cv2.getTrackbarPos('threshold', 'Frame')
-			#print(threshold)
 			ret, img = cv2.threshold(roi, threshold, 255, cv2.THRESH_BINARY)
-			#img = cv2.erode(img, None, iterations=2)
-			#img = cv2.dilate(img, None, iterations=4)
+
 			img = cv2.medianBlur(img, 7)
 			keypoints = eye_detector.detect(img)
-			print(keypoints)
+			
+			for point in keypoints:
+				kx = int(point.pt[0])
+				ky = int(point.pt[1])
+				print(point.pt[0])
+				print(point.pt[1])
+				cv2.circle(frame, (x+kx, y+ky), 3, (255, 0, 0), -1) #BGR format
 			
 			original = frame[y:y+height, x:x+width]
-			cv2.drawKeypoints(original, keypoints, original, (255,180,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+			#cv2.drawKeypoints(original, keypoints, original, (255,180,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 			
 	cv2.imshow("Frame", frame)
 	key = cv2.waitKey(1) & 0xFF

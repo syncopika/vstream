@@ -48,94 +48,17 @@ class VStream(threading.Thread):
 		self.detector = state['detector']
 		self.predictor = state['predictor']
 		
-	def get_pupil_coords_old(self, gray, shape, coords):
-		# gray - grayscaled image 
-		# shape - the facial landmarks 
-		# coords - the dict to store the estimated pupil coords
+		detector_params = cv2.SimpleBlobDetector_Params()
+		detector_params.filterByArea = True
+		detector_params.maxArea = 1500
+		self.eye_detector = cv2.SimpleBlobDetector_create(detector_params)
 
-		left_eye_l = (int(shape[36][0]), int(shape[36][1]))
-		left_eye_r = (int(shape[39][0]), int(shape[39][1]))
-		left_slope = (left_eye_r[1] - left_eye_l[1]) / (left_eye_r[0] - left_eye_l[0])
-		left_b = left_eye_l[1] - (left_slope * left_eye_l[0]) # y-intercept from y=mx+b
 		
-		right_eye_l = (int(shape[42][0]), int(shape[42][1]))
-		right_eye_r = (int(shape[45][0]), int(shape[45][1]))
-		right_slope = (right_eye_r[1] - right_eye_l[1]) / (right_eye_r[0] - right_eye_l[0])
-		right_b = right_eye_l[1] - (right_slope * right_eye_l[0])
-		
-		# estimate pupil location (given by 1 coord)
-		# as as a separate field in the json output? one field for landmarks, one field for pupils
-		left_start = left_eye_l[0] + 1
-		left_end = left_eye_r[0] - 1
-		max = 0 # we're looking for the peak of intensity given 
-		max_coord = []
-		#print("=========== left eye ==============")
-		for i in range(left_start, left_end+1):
-			y = (left_slope * i) + left_b
-			intensity = gray[i, int(y)]
-			
-			if max == 0:
-				max = intensity
-				max_coord = [i, int(y)]
-			else:
-				if intensity > max:
-					max = intensity
-					max_coord = [i, int(y)]
-			
-			#print(f"intensity @ {i}, {y}: {intensity}")
-			#coords['pupil_coords'].append({'x': i, 'y': y})
-		#print("======================")
-		max = 0
-		coords['pupil_coords'].append({'x': max_coord[0], 'y': max_coord[1]})
-		
-		right_start = right_eye_l[0] + 1
-		right_end = right_eye_r[0] - 1
-		#print("========= right eye ==============")
-		for i in range(right_start, right_end+1):
-			y = (right_slope * i) + right_b
-			intensity = gray[i, int(y)]
-			
-			if max == 0:
-				max = intensity
-				max_coord = [i, int(y)]
-			else:
-				if intensity > max:
-					max = intensity
-					max_coord = [i, int(y)]
-			
-			#print(f"intensity @ {i}, {y}: {intensity}")	
-			#coords['pupil_coords'].append({'x': i, 'y': y})
-		#print("======================")
-		coords['pupil_coords'].append({'x': max_coord[0], 'y': max_coord[1]})
 		
 	def get_pupil_coords(self, gray, shape, coords):
 		# https://subscription.packtpub.com/book/application_development/9781785283932/4/ch04lvl1sec44/detecting-pupils
 		# https://medium.com/@stepanfilonov/tracking-your-eyes-with-python-3952e66194a6
-		#thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 51, 2)
-		ret, thresh = cv2.threshold(gray, 179, 255, cv2.THRESH_BINARY)
-		contours, hierarchy = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-		
-		for contour in contours:
-			print("got a contour!")
-			area = cv2.contourArea(contour)
-			rect = cv2.boundingRect(contour)
-			x, y, width, height = rect
-			radius = 0.25 * (width + height) # why is this? contour may not be a circle (i.e. elliptical)
-			
-			print(f"area of contour: {area}")
-			print(f"width of contour: {width}")
-			print(f"height of contour: {height}")
-			print(f"radius of contour: {radius}")
-			
-			area_condition = (100 <= area <= 200) # this should correspond with the window size of the image stream?
-			is_symmetrical = (abs(1 - float(width)/float(height)) <= 0.2)
-			is_filled = (abs(1 - (area / (math.pi * math.pow(radius, 2)))) <= 0.3)
-			
-			if True: #area_condition and is_symmetrical and is_filled:
-				# expecting only 2 contours!
-				coords['pupil_coords'].append({'x': int(x+radius), 'y': int(y+radius)})
-		
-		print("--------------------")
+		pass
 	
 	
 	def run(self):
@@ -160,33 +83,92 @@ class VStream(threading.Thread):
 					# might be helpful for pupil tracking: 
 					# https://stackoverflow.com/questions/45789549/track-eye-pupil-position-with-webcam-opencv-and-python
 					
-					# for pupil tracking:
-					# we know the landmark coord indices that match the eyes 
-					# so we can create a box approximation around where we thing the pupil should be? (just go along the middle of the eye section)
-					# then evaluate that area for where there's a contrast (left and right bound?)
-					# then return the middle of the left and right bound (of the section that's darker)
-					# so go from left of the box to the right side
-					# as you keep going note any significant change in color (that's something you have to decide)
-					# once you hit that point where there's a significant contrast, record it as the left bound
-					# and keep going until you either hit a lighter area again (mark as right bound) or hit the right end of the box
-					# take the middle of the left and right to estimate where the pupil is
+					# for pupil tracking?
 					# https://answers.opencv.org/question/173862/how-to-check-in-python-if-a-pixel-in-an-image-is-of-a-specific-color-other-than-black-and-white-for-grey-image/
 					# https://stackoverflow.com/questions/51781843/color-intensity-of-pixelx-y-on-image-opencv-python
+					left_eye = {'minX': 0, 'maxX': 0, 'maxY': 0, 'minY': 0} # top/bottom y values are the vertical boundaries, left/right x values are the horizontal bounds
+					right_eye = {'minX': 0, 'maxX': 0, 'maxY': 0, 'minY': 0} 
+					index = 0
 					
 					shape = self.predictor(gray, face)
 					shape = face_utils.shape_to_np(shape)
-					
-					# we're assuming that the head is leveled here (i.e. we can just go across via x-axis but what if the head is at an angle?)
-					# we need a left coord and a width for left and right eye 
-					# can we index shape?
-					# https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
-					scale_factor = 0.7
-					resized_gray = cv2.resize(gray, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
-					self.get_pupil_coords(resized_gray, shape, coords)
+
 					
 					for (x,y) in shape:
+					
+						# get info on eyes
+						if index in [36, 39, 37, 41]:
+							# left eye coords 
+							xCoord = int(x)
+							yCoord = int(y)
+							
+							if left_eye['minX'] == 0:
+								left_eye['minX'] = xCoord
+							else:
+								left_eye['minX'] = min(xCoord, left_eye['minX'])
+							
+							if left_eye['minY'] == 0:
+								left_eye['minY'] = yCoord
+							else:
+								left_eye['minY'] = min(yCoord, left_eye['minY'])
+							
+							left_eye['maxX'] = max(xCoord, left_eye['maxX'])
+							left_eye['maxY'] = max(yCoord, left_eye['maxY'])
+							
+						elif index in [42, 45, 43, 47]:
+							# right eye coords
+							xCoord = int(x)
+							yCoord = int(y)
+							
+							if right_eye['minX'] == 0:
+								right_eye['minX'] = xCoord
+							else:
+								right_eye['minX'] = min(xCoord, right_eye['minX'])
+							
+							if right_eye['minY'] == 0:
+								right_eye['minY'] = yCoord
+							else:
+								right_eye['minY'] = min(yCoord, right_eye['minY'])
+					
+							right_eye['maxX'] = max(xCoord, right_eye['maxX'])
+							right_eye['maxY'] = max(yCoord, right_eye['maxY'])
+					
+						index += 1
+						
 						coords['landmark_coords'].append({'x': int(x), 'y': int(y)})
-						cv2.circle(frame, (x, y), 1, (255, 0, 0), -1) # BGR format
+						#cv2.circle(frame, (x, y), 1, (255, 0, 0), -1) # BGR format
+						
+
+					# draw in pupils with eye info
+					offset = 10
+					for eye in [left_eye, right_eye]:
+						# get the region-of-interest (ROI) based on eye info
+						width = eye['maxX'] - eye['minX'] + offset
+						height = eye['maxY'] - eye['minY'] + offset
+						
+						y = eye['minY'] - int(offset/2)
+						x = eye['minX']
+						
+						#print(eye)
+						#print(f"y: {y}")
+						#print(f"x: {x}")
+						
+						# https://stackoverflow.com/questions/9084609/how-to-copy-a-image-region-using-opencv-in-python
+						roi = gray[y:(y+height), x:(x+width)]
+						cv2.rectangle(frame, (x, y), (x+width, y+height), (0,0,255), 1);
+						
+						#threshold = cv2.getTrackbarPos('threshold', 'Frame')
+						ret, img = cv2.threshold(roi, 35, 255, cv2.THRESH_BINARY)
+
+						img = cv2.medianBlur(img, 7)
+						keypoints = self.eye_detector.detect(img)
+						
+						for point in keypoints:
+							kx = int(point.pt[0])
+							ky = int(point.pt[1])
+							#cv2.circle(frame, (x+kx, y+ky), 3, (255, 0, 0), -1) #BGR format
+							coords['pupil_coords'].append({'x': x+kx, 'y': y+ky})
+
 						
 				#cv2.imshow("Frame", frame)
 				#cv2.waitKey(1)
