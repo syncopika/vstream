@@ -53,12 +53,16 @@ print("setting up camera sensor...")
 #time.sleep(2.0)
 
 # https://medium.com/@stepanfilonov/tracking-your-eyes-with-python-3952e66194a6
+# helpful! https://www.learnopencv.com/blob-detection-using-opencv-python-c/
 detector_params = cv2.SimpleBlobDetector_Params()
 detector_params.filterByArea = True
 detector_params.maxArea = 1500
+detector_params.filterByConvexity = False
+detector_params.filterByInertia = False
+
 eye_detector = cv2.SimpleBlobDetector_create(detector_params)
 
-def func():
+def func(x):
 	pass
 
 
@@ -137,25 +141,28 @@ while True:
 			y = eye['minY'] - int(offset/2)
 			x = eye['minX']
 			
-			print(eye)
-			print(f"y: {y}")
-			print(f"x: {x}")
+			#print(eye)
+			#print(f"y: {y}")
+			#print(f"x: {x}")
 			
 			# https://stackoverflow.com/questions/9084609/how-to-copy-a-image-region-using-opencv-in-python
 			roi = gray[y:(y+height), x:(x+width)]
 			cv2.rectangle(frame, (x, y), (x+width, y+height), (0,0,255), 1);
 			
 			threshold = cv2.getTrackbarPos('threshold', 'Frame')
-			ret, img = cv2.threshold(roi, threshold, 255, cv2.THRESH_BINARY)
-
-			img = cv2.medianBlur(img, 7)
+			
+			img = cv2.blur(roi, (4,4))
+			#img = cv2.medianBlur(roi, 7)
+			ret, img = cv2.threshold(img, threshold, 255, cv2.THRESH_BINARY)
+			
 			keypoints = eye_detector.detect(img)
 			
-			for point in keypoints:
+			# if multiple results, just get the first one
+			for point in keypoints[:1]:
 				kx = int(point.pt[0])
 				ky = int(point.pt[1])
-				print(point.pt[0])
-				print(point.pt[1])
+				#print(point.pt[0])
+				#print(point.pt[1])
 				cv2.circle(frame, (x+kx, y+ky), 3, (255, 0, 0), -1) #BGR format
 			
 			original = frame[y:y+height, x:x+width]

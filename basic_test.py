@@ -33,6 +33,7 @@ STATE = {
 	"video_stream": VIDEO_STREAM,
 	"detector": None,
 	"predictor": None,
+	"threshold": 54,
 	"socket": socketio
 }
 
@@ -51,6 +52,8 @@ class VStream(threading.Thread):
 		detector_params = cv2.SimpleBlobDetector_Params()
 		detector_params.filterByArea = True
 		detector_params.maxArea = 1500
+		detector_params.filterByConvexity = False
+		detector_params.filterByInertia = False
 		self.eye_detector = cv2.SimpleBlobDetector_create(detector_params)
 
 		
@@ -158,9 +161,13 @@ class VStream(threading.Thread):
 						cv2.rectangle(frame, (x, y), (x+width, y+height), (0,0,255), 1);
 						
 						#threshold = cv2.getTrackbarPos('threshold', 'Frame')
-						ret, img = cv2.threshold(roi, 35, 255, cv2.THRESH_BINARY)
+						threshold = STATE['threshold'] # 54
+						
+						img = cv2.blur(roi, (3,3))
+						#img = cv2.medianBlur(img, 7)
+						ret, img = cv2.threshold(img, threshold, 255, cv2.THRESH_BINARY)
 
-						img = cv2.medianBlur(img, 7)
+						
 						keypoints = self.eye_detector.detect(img)
 						
 						for point in keypoints:
@@ -218,6 +225,12 @@ def toggle_stream(data):
 	global STATE
 	logging.info("--------------- SEND_DATA HAS BEEN TOGGLED ---------------")
 	STATE['send_data'] = (not STATE['send_data'])
+	
+	
+@socketio.on('updateThreshold')
+def update_threshold(data):
+	global STATE
+	STATE['threshold'] = data
 	
 
 """

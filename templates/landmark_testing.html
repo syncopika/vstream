@@ -29,6 +29,8 @@
 			<br />
 			
 			<button id='toggleStream'> pause/continue </button>
+			<label for="threshold" id="thresholdLabel"> threshold: 54 </label>
+			<input type="range" id="threshold" min="0" max="100" default="54" ></input>
 			
 		</div>
 	</body>
@@ -46,6 +48,13 @@
 		document.getElementById("toggleStream").addEventListener("click", (evt) => {
 			console.log("toggling stream...");
 			toggleStream();
+		});
+		
+		document.getElementById("threshold").addEventListener("input", (evt) => {
+			document.getElementById("thresholdLabel").textContent = "threshold: " + evt.target.value;
+			
+			// update the server with the new threshold value
+			socket.emit("updateThreshold", parseInt(evt.target.value))
 		});
 		
 		// handle receiving facial landmark coordinate data 
