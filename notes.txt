@@ -101,3 +101,8 @@ a group when imported.
 
 8/15/20
 experimented with interpolation and seems to work fairly well for the eyebrows! and I don't need to keep track of a prev value in this case. but need to do more testing. :D
+
+
+8/28/20
+pupil tracking is hard :(. got something working sorta though (will sort out a few more things) but also need to try moving on to head rotations. 
+this looks helpful: https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/

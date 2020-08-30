@@ -62,6 +62,9 @@ class VStream(threading.Thread):
 		# https://subscription.packtpub.com/book/application_development/9781785283932/4/ch04lvl1sec44/detecting-pupils
 		# https://medium.com/@stepanfilonov/tracking-your-eyes-with-python-3952e66194a6
 		pass
+		
+	def update_eye_locations(self, left_eye, right_eye):
+		pass
 	
 	
 	def run(self):

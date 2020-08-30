@@ -143,6 +143,7 @@
 					}
 				}
 				
+				// the actual 'left' eye when you're facing the screen
 				if(part === "leftEye"){
 					let top = landmarkData[38];
 					//let bottom = landmarkData[41];
@@ -217,8 +218,29 @@
 				}
 				
 				if(part === "head"){
-					// jaw technically?
+					// control blinking
+					
+					//handle left eye blink
+					let topLeft = landmarkData[38];
+					let bottomLeft = landmarkData[40];
+					map['leftEyeBlink'] = {
+						'vertical': {
+							'baseline': getDistance(topLeft, bottomLeft),
+							'previous': 0
+						}
+					}
+					
+					//handle right eye blink
+					let topRight = landmarkData[44];
+					let bottomRight = landmarkData[46];
+					map['rightEyeBlink'] = {
+						'vertical': {
+							'baseline': getDistance(topRight, bottomRight),
+							'previous': 0
+						}
+					}
 				}
+				
 			}
 
 		}
@@ -433,6 +455,7 @@
 		
 		// create a function that gets the interpolated y-value given an x for a specific 
 		// range (given by x1,y1 and x2,y2)
+		// https://en.wikipedia.org/wiki/Interpolation
 		function createInterpolation(x1, y1, x2, y2){
 			return function(newX){
 				return y1 + (newX - x1)*((y2-y1)/(x2-x1));
@@ -508,15 +531,15 @@
 			// also, big note! the eyes are actually groups with 2 meshes each!!
 			// so we need to target the morphInfluence of the children!
 			
-			let leftEyeVertical = mapping['leftEye'].vertical;
-			let rightEyeVertical = mapping['rightEye'].vertical;
+			let leftEyeVertical = mapping['leftEyeBlink'].vertical;
+			let rightEyeVertical = mapping['rightEyeBlink'].vertical;
 			let lastVertLeft, lastVertRight;
 			let minDelta = 1.5;
 			
 			lastVertLeft = leftEyeVertical.previous === 0 ? leftEyeVertical.baseline : leftEyeVertical.previous;
 			lastVertRight = rightEyeVertical.previous === 0 ? rightEyeVertical.baseline : rightEyeVertical.previous;
 
-			let currDistVertLeft = getDistance(landmark_data[38], landmark_data[41]);
+			let currDistVertLeft = getDistance(landmark_data[38], landmark_data[40]);
 			let currDistVertRight = getDistance(landmark_data[44], landmark_data[46]);
 			
 			let deltaVertLeft = (currDistVertLeft - lastVertLeft);
@@ -541,7 +564,6 @@
 				mapping['rightEye'].vertical.previous = currDistVertRight;
 			}
 		}
-		
 		
 		function handleEyebrowMovement(mapping, landmark_data, avatarParts){		
 			let left = mapping.leftEyebrow.dist;
@@ -764,7 +786,7 @@
 				
 				if(mapping['leftEye'] && mapping['rightEye']){
 					handleEyeMovement(mapping, landmark_data, avatarParts);
-					handleEyeballMovement(mapping, landmark_data, pupil_coords, avatarParts);
+					//handleEyeballMovement(mapping, landmark_data, pupil_coords, avatarParts);
 				}
 				
 				if(mapping['leftEyebrow'] && mapping['rightEyebrow']){
