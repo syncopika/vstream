@@ -83,6 +83,7 @@ class VStream(threading.Thread):
 		# gray - grayscaled image 
 		# shape - the facial landmarks 
 		# coords - the dict to store the estimated pupil coords
+		ret, gray = cv2.threshold(gray, 45, 255, cv2.THRESH_BINARY)
 
 		left_eye_l = (int(shape[36][0]), int(shape[36][1]))
 		left_eye_r = (int(shape[39][0]), int(shape[39][1]))
@@ -96,8 +97,8 @@ class VStream(threading.Thread):
 		
 		# estimate pupil location (given by 1 coord)
 		# as as a separate field in the json output? one field for landmarks, one field for pupils
-		left_start = left_eye_l[0] + 1
-		left_end = left_eye_r[0] - 1
+		left_start = left_eye_l[0] + 3
+		left_end = left_eye_r[0] - 3
 		max = 0 # we're looking for the peak of intensity given 
 		max_coord = []
 		
@@ -116,8 +117,8 @@ class VStream(threading.Thread):
 		max = 0
 		coords['pupil_coords'].append({'x': max_coord[0], 'y': max_coord[1]})
 		
-		right_start = right_eye_l[0] + 1
-		right_end = right_eye_r[0] - 1
+		right_start = right_eye_l[0] + 3
+		right_end = right_eye_r[0] - 3
 		for i in range(right_start, right_end+1):
 			y = (right_slope * i) + right_b
 			intensity = gray[i, int(y)]

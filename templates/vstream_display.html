@@ -221,23 +221,29 @@
 					// control blinking
 					
 					//handle left eye blink
+					// remember, going towards a morph influence value of 1.0 (full strength) means the eye is being closed
+					// 0.0 => eyes opened
 					let topLeft = landmarkData[38];
 					let bottomLeft = landmarkData[40];
+					let distLeft = getDistance(topLeft, bottomLeft);
 					map['leftEyeBlink'] = {
-						'vertical': {
-							'baseline': getDistance(topLeft, bottomLeft),
+						'dist': {
+							'baseline': distLeft,
 							'previous': 0
-						}
+						},
+						'interpolate': createInterpolation(distLeft, 0.0, distLeft/2, 1.0)
 					}
 					
 					//handle right eye blink
 					let topRight = landmarkData[44];
 					let bottomRight = landmarkData[46];
+					let distRight = getDistance(topRight, bottomRight);
 					map['rightEyeBlink'] = {
-						'vertical': {
-							'baseline': getDistance(topRight, bottomRight),
+						'dist': {
+							'baseline': distRight,
 							'previous': 0
-						}
+						},
+						'interpolate': createInterpolation(distRight, 0.0, distRight/2, 1.0)
 					}
 				}
 				
@@ -526,42 +532,31 @@
 			
 			// ok so I made this a bit confusing, sorry -__-
 			// the shape key is closeEye so the larger the morph influence value, the more closed the eye gets.
-			// so 1.0 == closed eye, 0.0 == open eye. :/
+			// so 1.0 == closed eye, 0.0 == open eye.
 			
-			// also, big note! the eyes are actually groups with 2 meshes each!!
-			// so we need to target the morphInfluence of the children!
-			
-			let leftEyeVertical = mapping['leftEyeBlink'].vertical;
-			let rightEyeVertical = mapping['rightEyeBlink'].vertical;
+			let leftEyeVertical = mapping['leftEyeBlink'].dist;
+			let rightEyeVertical = mapping['rightEyeBlink'].dist;
 			let lastVertLeft, lastVertRight;
-			let minDelta = 1.5;
+			let minDelta = 1.4;
 			
 			lastVertLeft = leftEyeVertical.previous === 0 ? leftEyeVertical.baseline : leftEyeVertical.previous;
 			lastVertRight = rightEyeVertical.previous === 0 ? rightEyeVertical.baseline : rightEyeVertical.previous;
 
-			let currDistVertLeft = getDistance(landmark_data[38], landmark_data[40]);
-			let currDistVertRight = getDistance(landmark_data[44], landmark_data[46]);
+			let currDistLeft = getDistance(landmark_data[38], landmark_data[40]);
+			let currDistRight = getDistance(landmark_data[44], landmark_data[46]);
 			
-			let deltaVertLeft = (currDistVertLeft - lastVertLeft);
-			if(Math.abs(deltaVertLeft) > minDelta){
-				deltaVertLeft /= 3;
-				let currEyeLeft = avatarParts.head.morphTargetInfluences[0];
-				
-				currEyeLeft = clamp(currEyeLeft - deltaVertLeft, 0.0, 1.0); // if the eye is closing, deltaVertLeft should be a negative value (thus adding to currEyeLeft)
-				
-				avatarParts.head.morphTargetInfluences[0] = currEyeLeft;
-				mapping['leftEye'].vertical.previous = currDistVertLeft;
+			let deltaVertLeft = (currDistLeft - lastVertLeft);
+			if(Math.abs(deltaVertLeft) > minDelta){		
+				let newVal = mapping.leftEyeBlink.interpolate(currDistLeft);		
+				avatarParts.head.morphTargetInfluences[0] = clamp(newVal, 0, 1); // left eye
+				mapping['leftEyeBlink'].dist.previous = currDistLeft;
 			}
 			
-			let deltaVertRight = (currDistVertRight - lastVertRight);
+			let deltaVertRight = (currDistRight - lastVertRight);
 			if(Math.abs(deltaVertRight) > minDelta){
-				deltaVertRight /= 3;
-				let currEyeRight = avatarParts.head.morphTargetInfluences[1];
-				
-				currEyeRight = clamp(currEyeRight - deltaVertRight, 0.0, 1.0);
-				
-				avatarParts.head.morphTargetInfluences[1] = currEyeRight;
-				mapping['rightEye'].vertical.previous = currDistVertRight;
+				let newVal = mapping.rightEyeBlink.interpolate(currDistRight);
+				avatarParts.head.morphTargetInfluences[1] = clamp(newVal, 0, 1);// right eye
+				mapping['rightEyeBlink'].dist.previous = currDistRight;
 			}
 		}
 		
@@ -588,8 +583,6 @@
 			if(Math.abs(deltaLeft) > minDelta){
 				// we need to move the eyebrow down
 				let newVal = mapping.leftEyebrow.interpolate(currDistLeft);
-				let oldMorphVal = avatarParts.leftEyebrow.morphTargetInfluences[1];
-				
 				avatarParts.leftEyebrow.morphTargetInfluences[1] = clamp(newVal, 0, 1);
 				mapping.leftEyebrow.dist.previous = currDistLeft;
 			}
@@ -597,8 +590,6 @@
 			if(Math.abs(deltaRight) > minDelta){
 				// we need to move the eyebrow down
 				let newVal = mapping.rightEyebrow.interpolate(currDistRight);
-				let oldMorphVal = avatarParts.rightEyebrow.morphTargetInfluences[1];
-				
 				avatarParts.rightEyebrow.morphTargetInfluences[1] = clamp(newVal, 0, 1);
 				mapping.rightEyebrow.dist.previous = currDistRight;
 			}
@@ -629,22 +620,18 @@
 			let newHorzVal = clamp(mapping.leftEye.horizontal.interpolate(eyeLeftLat), 0.0, 1.0);
 			if(leftHorzDir){
 				// use the moveRight shapekey - morphTargetInfluence[1]
-				//avatarParts.leftEye.morphTargetInfluences[0] = 0.0;
 				avatarParts.leftEye.morphTargetInfluences[1] = newHorzVal;
 			}else{
 				// use the moveLeft shapekey - morphTargetInfluence[0]
-				//avatarParts.leftEye.morphTargetInfluences[1] = 0.0;
 				avatarParts.leftEye.morphTargetInfluences[0] = newHorzVal;
 			}
 			
 			let newVertVal = clamp(mapping.leftEye.vertical.interpolate(eyeLeftVert), 0.0, 1.0);
 			if(!leftVertDir){
 				// move eyeball down - morphTargetInfluence[3]
-				//avatarParts.leftEye.morphTargetInfluences[2] = 0.0;
 				avatarParts.leftEye.morphTargetInfluences[3] = newVertVal;
 			}else{
 				// move eyeball up - morphTargetInfluence[2]
-				//avatarParts.leftEye.morphTargetInfluences[3] = 0.0;
 				avatarParts.leftEye.morphTargetInfluences[2] = newVertVal;
 			}
 			
@@ -859,7 +846,8 @@
 				updateCanvas(landmark_data, pupil_coords, context);
 
 
-				// update mesh
+				// move avatar closer or away from camera
+				/*
 				if(movingForwards){
 					// just update camera!
 					camera.translateZ(-1.0);
@@ -867,7 +855,7 @@
 				}else if(movingBackwards){
 					movingBackwards = false;
 					camera.translateZ(1.0);
-				}
+				}*/
 				
 				/* rotate about z axis
 				if(zRotateLeft){
