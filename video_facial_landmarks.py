@@ -70,6 +70,100 @@ vs = cv2.VideoCapture(0)
 cv2.namedWindow('Frame')	
 cv2.createTrackbar('threshold', 'Frame', 0, 255, func)
 
+
+def get_pupil_coords(frame, gray, shape, threshold):
+
+	# gray - grayscaled image 
+	# shape - the facial landmarks 
+	# coords - the dict to store the estimated pupil coords
+	
+	# hmmm, currently not handling vertical movement. maybe need to test multiple rows?
+	# also, lateral movement doesn't seem to be getting picked up. need to check the grayscaled images?
+	# but presentation/placement of the pupils look fine (they're pretty centered at least lol)
+
+	ret, gray = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY) # use a binary threshold to make it easier to find peak intensity?
+
+	left_eye_l = (int(shape[36][0]), int(shape[36][1]))
+	left_eye_r = (int(shape[39][0]), int(shape[39][1]))
+	left_slope = (left_eye_r[1] - left_eye_l[1]) / (left_eye_r[0] - left_eye_l[0])
+	left_b = left_eye_l[1] - (left_slope * left_eye_l[0]) # y-intercept from y=mx+b
+	
+	right_eye_l = (int(shape[42][0]), int(shape[42][1]))
+	right_eye_r = (int(shape[45][0]), int(shape[45][1]))
+	right_slope = (right_eye_r[1] - right_eye_l[1]) / (right_eye_r[0] - right_eye_l[0])
+	right_b = right_eye_l[1] - (right_slope * right_eye_l[0])
+	
+	# estimate pupil location (given by 1 coord)
+	# as as a separate field in the json output? one field for landmarks, one field for pupils
+	left_start = left_eye_l[0] + 2
+	left_end = left_eye_r[0] - 2
+	max = 0 # we're looking for the peak of intensity given 
+	max_coord_start = None
+	max_coord_end = None
+	
+	for i in range(left_start, left_end+1):
+		y = (left_slope * i) + left_b
+		intensity = gray[i, int(y)]
+		
+		# note that you run the risk here of miscounting the right place if 
+		# the point you start at happens to be a dark spot (i.e. the left corner of the eye (and right for that matter) might be dark
+		# might require more investigating
+		if max == 0:
+			max = intensity
+			max_coord_start = (i, int(y))
+		elif max_coord_start and intensity > max:
+			max = intensity
+			max_coord_start = (i, int(y))
+		elif max_coord_start and intensity < max:
+			# find where the peak intensity ends
+			max_coord_end = (i, int(y))
+			break
+		else:
+			max_coord_end = (i, int(y))
+	
+	left_x = max_coord_start[0] + int((max_coord_end[0] - max_coord_start[0]) / 2)
+	left_y = max_coord_start[1] + int((max_coord_end[1] - max_coord_start[1]) / 2) 
+	cv2.circle(frame, (left_x, left_y), 3, (255, 0, 0), -1)
+	"""
+	coords['pupil_coords'].append({ 
+		'x': max_coord_start[0] + int((max_coord_end[0] - max_coord_start[0]) / 2), 
+		'y': max_coord_start[1] + int((max_coord_end[1] - max_coord_start[1]) / 2) 
+	})
+	"""
+	
+	max = 0 #reset
+	
+	
+	right_start = right_eye_l[0] + 2
+	right_end = right_eye_r[0] - 2
+	for i in range(right_start, right_end+1):
+		y = (right_slope * i) + right_b
+		intensity = gray[i, int(y)]
+		
+		if max == 0:
+			max = intensity
+			max_coord_start = (i, int(y))
+		elif max_coord_start and intensity > max:
+			max = intensity
+			max_coord_start = (i, int(y))
+		elif max_coord_start and intensity < max:
+			max_coord_end = (i, int(y))
+			break
+		else:
+			max_coord_end = (i, int(y))
+
+	right_x = max_coord_start[0] + int((max_coord_end[0] - max_coord_start[0]) / 2)
+	right_y = max_coord_start[1] + int((max_coord_end[1] - max_coord_start[1]) / 2) 
+	cv2.circle(frame, (right_x, right_y), 3, (255, 0, 0), -1)
+	
+	"""
+	coords['pupil_coords'].append({ 
+		'x': max_coord_start[0] + int((max_coord_end[0] - max_coord_start[0]) / 2), 
+		'y': max_coord_start[1] + int((max_coord_end[1] - max_coord_start[1]) / 2) 
+	})
+	"""
+
+
 while True:
 	#frame = vs.read()
 	ret, frame = vs.read()
@@ -88,6 +182,10 @@ while True:
 		
 		for (x,y) in shape:
 		
+			threshold = cv2.getTrackbarPos('threshold', 'Frame')
+			get_pupil_coords(frame, gray, shape, threshold)
+		
+			"""
 			# get info on eyes
 			if index in [36, 39, 37, 41]:
 				# left eye coords 
@@ -130,6 +228,7 @@ while True:
 
 			# make a dot for the landmark coord
 			#cv2.circle(frame, (x, y), 3, (255, 0, 0), -1) #BGR format
+			
 		
 		# draw in pupils with eye info
 		offset = 10
@@ -168,6 +267,8 @@ while True:
 			original = frame[y:y+height, x:x+width]
 			#cv2.drawKeypoints(original, keypoints, original, (255,180,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 			
+		"""
+
 	cv2.imshow("Frame", frame)
 	key = cv2.waitKey(1) & 0xFF
 	
