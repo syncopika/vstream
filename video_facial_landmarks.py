@@ -71,6 +71,23 @@ cv2.namedWindow('Frame')
 cv2.createTrackbar('threshold', 'Frame', 0, 255, func)
 
 
+def estimate_vertical_loc(x_coord, y_top, y_bottom, shape, gray):
+	
+	curr_intensity = gray[x_coord, y_top]
+	max_start_y = 0
+	max_end_y = 0
+	
+	for i in range(y_top, y_bottom):
+		intensity = gray[x_coord, i]
+		if intensity > curr_intensity:
+			curr_intensity = intensity
+			max_start_y = i
+		elif intensity < curr_intensity:
+			max_end_y = i
+			
+	new_y = y_top + int((max_end_y - max_start_y) / 2)
+	return new_y
+
 def get_pupil_coords(frame, gray, shape, threshold):
 
 	# gray - grayscaled image 
@@ -98,8 +115,8 @@ def get_pupil_coords(frame, gray, shape, threshold):
 	left_start = left_eye_l[0] + 2
 	left_end = left_eye_r[0] - 2
 	max = 0 # we're looking for the peak of intensity given 
-	max_coord_start = None
-	max_coord_end = None
+	max_coord_start = (left_start, (left_slope * left_start) + left_b)
+	max_coord_end = (left_start, (left_slope * left_start) + left_b)
 	
 	for i in range(left_start, left_end+1):
 		y = (left_slope * i) + left_b
@@ -121,9 +138,18 @@ def get_pupil_coords(frame, gray, shape, threshold):
 		else:
 			max_coord_end = (i, int(y))
 	
-	left_x = max_coord_start[0] + int((max_coord_end[0] - max_coord_start[0]) / 2)
-	left_y = max_coord_start[1] + int((max_coord_end[1] - max_coord_start[1]) / 2) 
-	cv2.circle(frame, (left_x, left_y), 3, (255, 0, 0), -1)
+	left_x = int((max_coord_end[0] + max_coord_start[0]) / 2)
+	left_y = int((max_coord_end[1] + max_coord_start[1]) / 2) 
+	
+	# using the right x and y coords, get the vertical line that crosses through this point 
+	# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
+	left_y_top = int(shape[38][1])
+	left_y_bottom = int(shape[40][1]) # this is a larger num than left_y_top because going down == increasing
+	
+	new_left_y = estimate_vertical_loc(left_x, left_y_top + 2, left_y_bottom - 2, shape, gray)
+	
+	cv2.circle(frame, (left_x, new_left_y), 3, (255, 0, 0), -1)
+	#cv2.circle(frame, (left_x, left_y), 3, (255, 0, 0), -1)
 	"""
 	coords['pupil_coords'].append({ 
 		'x': max_coord_start[0] + int((max_coord_end[0] - max_coord_start[0]) / 2), 
@@ -152,9 +178,17 @@ def get_pupil_coords(frame, gray, shape, threshold):
 		else:
 			max_coord_end = (i, int(y))
 
-	right_x = max_coord_start[0] + int((max_coord_end[0] - max_coord_start[0]) / 2)
-	right_y = max_coord_start[1] + int((max_coord_end[1] - max_coord_start[1]) / 2) 
-	cv2.circle(frame, (right_x, right_y), 3, (255, 0, 0), -1)
+	right_x = int((max_coord_end[0] + max_coord_start[0]) / 2)
+	right_y = int((max_coord_end[1] + max_coord_start[1]) / 2) 
+	
+	
+	# using the right x and y coords, get the vertical line that crosses through this point 
+	# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
+	right_y_top = int(shape[44][1])
+	right_y_bottom = int(shape[46][1])
+	
+	new_right_y = estimate_vertical_loc(right_x, right_y_top + 2, right_y_bottom - 2, shape, gray)
+	cv2.circle(frame, (right_x, new_right_y), 3, (255, 0, 0), -1)
 	
 	"""
 	coords['pupil_coords'].append({ 
@@ -184,6 +218,9 @@ while True:
 		
 			threshold = cv2.getTrackbarPos('threshold', 'Frame')
 			get_pupil_coords(frame, gray, shape, threshold)
+			
+			# make a dot for the landmark coord
+			#cv2.circle(frame, (x, y), 1, (0, 255, 0), -1) #BGR format
 		
 			"""
 			# get info on eyes

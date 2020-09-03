@@ -106,3 +106,9 @@ experimented with interpolation and seems to work fairly well for the eyebrows! 
 8/28/20
 pupil tracking is hard :(. got something working sorta though (will sort out a few more things) but also need to try moving on to head rotations. 
 this looks helpful: https://www.learnopencv.com/head-pose-estimation-using-opencv-and-dlib/
+
+9/1/20
+a couple days ago I discovered binary thresholding the grayscale and just checking through the pixels of the line that crosses through
+the middle of the eye for intensity changes works pretty well for pupil detection! I think what I lacked last time was the binary
+threshold, which helps I think. need to check for vertical movement as well but it's much more stable and satisfactory than blob detection
+and contour checking so far.
