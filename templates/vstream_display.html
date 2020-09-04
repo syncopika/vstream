@@ -364,11 +364,12 @@
 		// https://discourse.threejs.org/t/solved-glb-model-is-very-dark/6258
 		// should always use a hemisphere light!
 		var hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
-		hemiLight.position.set(0, 200, -5);
+		hemiLight.position.set(0, 200, 0);
 		scene.add(hemiLight);
 	
-		var light = new THREE.AmbientLight(0x404040);
-		scene.add(light);
+		var dirLight = new THREE.DirectionalLight( 0xffffff );
+		dirLight.position.set( 0, 100, -10);
+		scene.add( dirLight );
 		
 		// basic_avatar_head-edit3.gltf is experimenting with a different kind of mesh setup for the eye.
 		// basic_avatar_head-edit2.gltf is the most up-to-date non-experimental
@@ -487,12 +488,12 @@
 			let currDistHorz = getDistance(leftMouthCorner, rightMouthCorner);
 			
 			// try to prevent jittering
-			if(Math.abs(currDistVert - lastVert) < 1.1){
+			if(Math.abs(currDistVert - lastVert) < 1.7){
 				return; // don't move mouth for small changes
 			}
 			
-			let minDeltaVert = 0.3;
-			let minDeltaHorz = 0.3;
+			let minDeltaVert = 0.8;
+			let minDeltaHorz = 0.5;
 			let deltaVert = currDistVert - mouthVertical.baseline;
 			let deltaHorz = currDistHorz - mouthHorizontal.baseline;
 			
@@ -597,6 +598,7 @@
 		
 		function handleEyeballMovement(mapping, landmark_data, pupil_data, avatarParts){
 			// each eyeball can move up, down, left, right
+			let minDelta = 1.8;
 					
 			let leftEyeTop = landmark_data[38];
 			let leftEyeRight = landmark_data[39];
@@ -612,59 +614,72 @@
 			let eyeLeftVert = getDistance(leftEyePupil, leftEyeTop);
 			let eyeLeftLat = getDistance(leftEyePupil, leftEyeRight);
 			
-			// if vert > base, interpolate up 
-			// if vert < base..oh wait how do i differentiate between up and down. compare y vals?
-			let leftHorzDir = (eyeLeftLat < eyeLeftLatBase) ? 1 : 0; // if new distance is smaller than baseline, we know the eyeball should be moving closer to the center of the face 
-			let leftVertDir = (eyeLeftVert < eyeLeftVertBase) ? 1 : 0; // if new vert distance is smaller, eye should be moving towards the top
-			
-			let newHorzVal = clamp(mapping.leftEye.horizontal.interpolate(eyeLeftLat), 0.0, 1.0);
-			if(leftHorzDir){
-				// use the moveRight shapekey - morphTargetInfluence[1]
-				avatarParts.leftEye.morphTargetInfluences[1] = newHorzVal;
-			}else{
-				// use the moveLeft shapekey - morphTargetInfluence[0]
-				avatarParts.leftEye.morphTargetInfluences[0] = newHorzVal;
+			if(Math.abs(eyeLeftVert - eyeLeftVertBase) > minDelta && 
+			   Math.abs(eyeLeftLat - eyeLeftLatBase) > minDelta){
+				// if vert > base, interpolate up 
+				// if vert < base..oh wait how do i differentiate between up and down. compare y vals?
+				// if new distance is smaller than baseline, we know the eyeball should be moving closer to the center of the face 
+				let leftHorzDir = (eyeLeftLat < eyeLeftLatBase) ? 1 : 0;
+				
+				// if new vert distance is smaller, eye should be moving towards the top
+				let leftVertDir = (eyeLeftVert < eyeLeftVertBase) ? 1 : 0;
+				
+				let newHorzVal = clamp(mapping.leftEye.horizontal.interpolate(eyeLeftLat), 0.0, 1.0);
+				if(leftHorzDir){
+					// use the moveRight shapekey - morphTargetInfluence[1]
+					avatarParts.leftEye.morphTargetInfluences[0] = 0.0;
+					avatarParts.leftEye.morphTargetInfluences[1] = newHorzVal;
+				}else{
+					// use the moveLeft shapekey - morphTargetInfluence[0]
+					avatarParts.leftEye.morphTargetInfluences[1] = 0.0;
+					avatarParts.leftEye.morphTargetInfluences[0] = newHorzVal;
+				}
+				
+				let newVertVal = clamp(mapping.leftEye.vertical.interpolate(eyeLeftVert), 0.0, 1.0);
+				if(!leftVertDir){
+					// move eyeball down - morphTargetInfluence[3]
+					avatarParts.leftEye.morphTargetInfluences[2] = 0.0;
+					avatarParts.leftEye.morphTargetInfluences[3] = newVertVal;
+				}else{
+					// move eyeball up - morphTargetInfluence[2]
+					avatarParts.leftEye.morphTargetInfluences[3] = 0.0;
+					avatarParts.leftEye.morphTargetInfluences[2] = newVertVal;
+				}
 			}
 			
-			let newVertVal = clamp(mapping.leftEye.vertical.interpolate(eyeLeftVert), 0.0, 1.0);
-			if(!leftVertDir){
-				// move eyeball down - morphTargetInfluence[3]
-				avatarParts.leftEye.morphTargetInfluences[3] = newVertVal;
-			}else{
-				// move eyeball up - morphTargetInfluence[2]
-				avatarParts.leftEye.morphTargetInfluences[2] = newVertVal;
-			}
-			
-
 			// handle right eye
 			let eyeRightVertBase = mapping.rightEye.vertical.baseline;
 			let eyeRightLatBase = mapping.rightEye.horizontal.baseline;
 			let eyeRightVert = getDistance(rightEyePupil, rightEyeTop);
 			let eyeRightLat = getDistance(rightEyePupil, rightEyeRight);
-			
-			let rightHorzDir = (eyeRightLat < eyeRightLatBase) ? 1 : 0; // if new distance is smaller than baseline, we know the eyeball should be moving closer to the center of the face 
-			let rightVertDir = (eyeRightVert < eyeRightVertBase) ? 1 : 0;
-			
-			newHorzVal = clamp(mapping.rightEye.horizontal.interpolate(eyeRightLat), 0.0, 1.0);
-			if(rightHorzDir){
-				// use the moveRight shapekey - morphTargetInfluence[1]
-				//avatarParts.rightEye.morphTargetInfluences[0] = 0.0;
-				avatarParts.rightEye.morphTargetInfluences[1] = newHorzVal;
-			}else{
-				// use the moveLeft shapekey - morphTargetInfluence[0]
-				//avatarParts.rightEye.morphTargetInfluences[1] = 0.0;
-				avatarParts.rightEye.morphTargetInfluences[0] = newHorzVal;
-			}
-			
-			newVertVal = clamp(mapping.rightEye.vertical.interpolate(eyeRightVert), 0.0, 1.0)
-			if(!rightVertDir){
-				// move eyeball down - morphTargetInfluence[3]
-				//avatarParts.rightEye.morphTargetInfluences[2] = 0.0;
-				avatarParts.rightEye.morphTargetInfluences[3] = newVertVal;
-			}else{
-				// move eyeball up - morphTargetInfluence[2]
-				//avatarParts.rightEye.morphTargetInfluences[3] = 0.0;
-				avatarParts.rightEye.morphTargetInfluences[2] = newVertVal;
+
+			if(Math.abs(eyeRightVert - eyeRightVertBase) > minDelta && 
+			   Math.abs(eyeRightLat - eyeRightLatBase) > minDelta){
+				
+				let rightHorzDir = (eyeRightLat < eyeRightLatBase) ? 1 : 0;
+				let rightVertDir = (eyeRightVert < eyeRightVertBase) ? 1 : 0;
+				
+				newHorzVal = clamp(mapping.rightEye.horizontal.interpolate(eyeRightLat), 0.0, 1.0);
+				if(rightHorzDir){
+					// use the moveRight shapekey - morphTargetInfluence[1]
+					avatarParts.rightEye.morphTargetInfluences[0] = 0.0;
+					avatarParts.rightEye.morphTargetInfluences[1] = newHorzVal;
+				}else{
+					// use the moveLeft shapekey - morphTargetInfluence[0]
+					avatarParts.rightEye.morphTargetInfluences[1] = 0.0;
+					avatarParts.rightEye.morphTargetInfluences[0] = newHorzVal;
+				}
+				
+				newVertVal = clamp(mapping.rightEye.vertical.interpolate(eyeRightVert), 0.0, 1.0)
+				if(!rightVertDir){
+					// move eyeball down - morphTargetInfluence[3]
+					//avatarParts.rightEye.morphTargetInfluences[2] = 0.0;
+					avatarParts.rightEye.morphTargetInfluences[3] = newVertVal;
+				}else{
+					// move eyeball up - morphTargetInfluence[2]
+					avatarParts.rightEye.morphTargetInfluences[3] = 0.0;
+					avatarParts.rightEye.morphTargetInfluences[2] = newVertVal;
+				}
 			}
 			
 		}
@@ -773,7 +788,7 @@
 				
 				if(mapping['leftEye'] && mapping['rightEye']){
 					handleEyeMovement(mapping, landmark_data, avatarParts);
-					//handleEyeballMovement(mapping, landmark_data, pupil_coords, avatarParts);
+					handleEyeballMovement(mapping, landmark_data, pupil_coords, avatarParts);
 				}
 				
 				if(mapping['leftEyebrow'] && mapping['rightEyebrow']){

@@ -87,39 +87,24 @@ def estimate_vertical_loc(x_coord, y_top, y_bottom, shape, gray):
 			
 	new_y = y_top + int((max_end_y - max_start_y) / 2)
 	return new_y
-
-def get_pupil_coords(frame, gray, shape, threshold):
-
-	# gray - grayscaled image 
-	# shape - the facial landmarks 
-	# coords - the dict to store the estimated pupil coords
 	
-	# hmmm, currently not handling vertical movement. maybe need to test multiple rows?
-	# also, lateral movement doesn't seem to be getting picked up. need to check the grayscaled images?
-	# but presentation/placement of the pupils look fine (they're pretty centered at least lol)
-
-	ret, gray = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY) # use a binary threshold to make it easier to find peak intensity?
-
-	left_eye_l = (int(shape[36][0]), int(shape[36][1]))
-	left_eye_r = (int(shape[39][0]), int(shape[39][1]))
-	left_slope = (left_eye_r[1] - left_eye_l[1]) / (left_eye_r[0] - left_eye_l[0])
-	left_b = left_eye_l[1] - (left_slope * left_eye_l[0]) # y-intercept from y=mx+b
 	
-	right_eye_l = (int(shape[42][0]), int(shape[42][1]))
-	right_eye_r = (int(shape[45][0]), int(shape[45][1]))
-	right_slope = (right_eye_r[1] - right_eye_l[1]) / (right_eye_r[0] - right_eye_l[0])
-	right_b = right_eye_l[1] - (right_slope * right_eye_l[0])
 	
-	# estimate pupil location (given by 1 coord)
-	# as as a separate field in the json output? one field for landmarks, one field for pupils
-	left_start = left_eye_l[0] + 2
-	left_end = left_eye_r[0] - 2
+def	get_pupil_coord(landmark1, landmark2, gray):
+	
+	point1 = (int(landmark1[0]), int(landmark1[1]))
+	point2 = (int(landmark2[0]), int(landmark2[1]))
+	slope = (point2[1] - point1[1]) / (point2[0] - point1[0])
+	intercept = point1[1] - (slope * point1[0]) # y-intercept from y=mx+b
+	
+	start = point1[0] + 2
+	end = point2[0] - 2
 	max = 0 # we're looking for the peak of intensity given 
-	max_coord_start = (left_start, (left_slope * left_start) + left_b)
-	max_coord_end = (left_start, (left_slope * left_start) + left_b)
+	max_coord_start = (start, (slope * start) + intercept)
+	max_coord_end = (start, (slope * start) + intercept)
 	
-	for i in range(left_start, left_end+1):
-		y = (left_slope * i) + left_b
+	for i in range(start, end+1):
+		y = (slope * i) + intercept
 		intensity = gray[i, int(y)]
 		
 		# note that you run the risk here of miscounting the right place if 
@@ -137,9 +122,26 @@ def get_pupil_coords(frame, gray, shape, threshold):
 			break
 		else:
 			max_coord_end = (i, int(y))
+
+	new_x = int((max_coord_end[0] + max_coord_start[0]) / 2)
+	new_y = int((max_coord_end[1] + max_coord_start[1]) / 2) 
 	
-	left_x = int((max_coord_end[0] + max_coord_start[0]) / 2)
-	left_y = int((max_coord_end[1] + max_coord_start[1]) / 2) 
+	return new_x, new_y
+	
+
+def get_pupil_coords(frame, gray, shape, threshold):
+
+	# gray - grayscaled image 
+	# shape - the facial landmarks 
+	# coords - the dict to store the estimated pupil coords
+	
+	# hmmm, currently not handling vertical movement. maybe need to test multiple rows?
+	# also, lateral movement doesn't seem to be getting picked up. need to check the grayscaled images?
+	# but presentation/placement of the pupils look fine (they're pretty centered at least lol)
+
+	ret, gray = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY) # use a binary threshold to make it easier to find peak intensity?
+
+	left_x, left_y = get_pupil_coord(shape[36], shape[39], gray)
 	
 	# using the right x and y coords, get the vertical line that crosses through this point 
 	# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
@@ -150,38 +152,9 @@ def get_pupil_coords(frame, gray, shape, threshold):
 	
 	cv2.circle(frame, (left_x, new_left_y), 3, (255, 0, 0), -1)
 	#cv2.circle(frame, (left_x, left_y), 3, (255, 0, 0), -1)
-	"""
-	coords['pupil_coords'].append({ 
-		'x': max_coord_start[0] + int((max_coord_end[0] - max_coord_start[0]) / 2), 
-		'y': max_coord_start[1] + int((max_coord_end[1] - max_coord_start[1]) / 2) 
-	})
-	"""
-	
-	max = 0 #reset
-	
-	
-	right_start = right_eye_l[0] + 2
-	right_end = right_eye_r[0] - 2
-	for i in range(right_start, right_end+1):
-		y = (right_slope * i) + right_b
-		intensity = gray[i, int(y)]
-		
-		if max == 0:
-			max = intensity
-			max_coord_start = (i, int(y))
-		elif max_coord_start and intensity > max:
-			max = intensity
-			max_coord_start = (i, int(y))
-		elif max_coord_start and intensity < max:
-			max_coord_end = (i, int(y))
-			break
-		else:
-			max_coord_end = (i, int(y))
 
-	right_x = int((max_coord_end[0] + max_coord_start[0]) / 2)
-	right_y = int((max_coord_end[1] + max_coord_start[1]) / 2) 
-	
-	
+	right_x, right_y = get_pupil_coord(shape[42], shape[45], gray)
+		
 	# using the right x and y coords, get the vertical line that crosses through this point 
 	# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
 	right_y_top = int(shape[44][1])
@@ -189,13 +162,6 @@ def get_pupil_coords(frame, gray, shape, threshold):
 	
 	new_right_y = estimate_vertical_loc(right_x, right_y_top + 2, right_y_bottom - 2, shape, gray)
 	cv2.circle(frame, (right_x, new_right_y), 3, (255, 0, 0), -1)
-	
-	"""
-	coords['pupil_coords'].append({ 
-		'x': max_coord_start[0] + int((max_coord_end[0] - max_coord_start[0]) / 2), 
-		'y': max_coord_start[1] + int((max_coord_end[1] - max_coord_start[1]) / 2) 
-	})
-	"""
 
 
 while True:
@@ -220,7 +186,7 @@ while True:
 			get_pupil_coords(frame, gray, shape, threshold)
 			
 			# make a dot for the landmark coord
-			#cv2.circle(frame, (x, y), 1, (0, 255, 0), -1) #BGR format
+			cv2.circle(frame, (x, y), 1, (0, 255, 0), -1) #BGR format
 		
 			"""
 			# get info on eyes

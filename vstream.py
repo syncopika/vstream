@@ -79,59 +79,92 @@ class VStream(threading.Thread):
 		self.detector = state['detector']
 		self.predictor = state['predictor']
 		
+	def estimate_vertical_loc(self, x_coord, y_top, y_bottom, shape, gray):
+		curr_intensity = gray[x_coord, y_top]
+		max_start_y = 0
+		max_end_y = 0
+		
+		for i in range(y_top, y_bottom):
+			intensity = gray[x_coord, i]
+			if intensity > curr_intensity:
+				curr_intensity = intensity
+				max_start_y = i
+			elif intensity < curr_intensity:
+				max_end_y = i
+				
+		new_y = y_top + int((max_end_y - max_start_y) / 2)
+		return new_y
+	
+	def	get_pupil_coord(self, landmark1, landmark2, gray):
+		
+		point1 = (int(landmark1[0]), int(landmark1[1]))
+		point2 = (int(landmark2[0]), int(landmark2[1]))
+		slope = (point2[1] - point1[1]) / (point2[0] - point1[0])
+		intercept = point1[1] - (slope * point1[0]) # y-intercept from y=mx+b
+		
+		start = point1[0] + 2
+		end = point2[0] - 2
+		max = 0 # we're looking for the peak of intensity given 
+		max_coord_start = (start, (slope * start) + intercept)
+		max_coord_end = (start, (slope * start) + intercept)
+		
+		for i in range(start, end+1):
+			y = (slope * i) + intercept
+			intensity = gray[i, int(y)]
+			
+			# note that you run the risk here of miscounting the right place if 
+			# the point you start at happens to be a dark spot (i.e. the left corner of the eye (and right for that matter) might be dark
+			# might require more investigating
+			if max == 0:
+				max = intensity
+				max_coord_start = (i, int(y))
+			elif max_coord_start and intensity > max:
+				max = intensity
+				max_coord_start = (i, int(y))
+			elif max_coord_start and intensity < max:
+				# find where the peak intensity ends
+				max_coord_end = (i, int(y))
+				break
+			else:
+				max_coord_end = (i, int(y))
+
+		new_x = int((max_coord_end[0] + max_coord_start[0]) / 2)
+		new_y = int((max_coord_end[1] + max_coord_start[1]) / 2) 
+		
+		return new_x, new_y
+		
 	def get_pupil_coords(self, gray, shape, coords):
+	
 		# gray - grayscaled image 
 		# shape - the facial landmarks 
 		# coords - the dict to store the estimated pupil coords
-		ret, gray = cv2.threshold(gray, 45, 255, cv2.THRESH_BINARY)
+		
+		# hmmm, currently not handling vertical movement. maybe need to test multiple rows?
+		# also, lateral movement doesn't seem to be getting picked up. need to check the grayscaled images?
+		# but presentation/placement of the pupils look fine (they're pretty centered at least lol)
+	
+		global STATE
+	
+		threshold = 0
+		ret, gray = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY) # use a binary threshold to make it easier to find peak intensity?
 
-		left_eye_l = (int(shape[36][0]), int(shape[36][1]))
-		left_eye_r = (int(shape[39][0]), int(shape[39][1]))
-		left_slope = (left_eye_r[1] - left_eye_l[1]) / (left_eye_r[0] - left_eye_l[0])
-		left_b = left_eye_l[1] - (left_slope * left_eye_l[0]) # y-intercept from y=mx+b
+		left_x, left_y = self.get_pupil_coord(shape[36], shape[39], gray)
 		
-		right_eye_l = (int(shape[42][0]), int(shape[42][1]))
-		right_eye_r = (int(shape[45][0]), int(shape[45][1]))
-		right_slope = (right_eye_r[1] - right_eye_l[1]) / (right_eye_r[0] - right_eye_l[0])
-		right_b = right_eye_l[1] - (right_slope * right_eye_l[0])
-		
-		# estimate pupil location (given by 1 coord)
-		# as as a separate field in the json output? one field for landmarks, one field for pupils
-		left_start = left_eye_l[0] + 3
-		left_end = left_eye_r[0] - 3
-		max = 0 # we're looking for the peak of intensity given 
-		max_coord = []
-		
-		for i in range(left_start, left_end+1):
-			y = (left_slope * i) + left_b
-			intensity = gray[i, int(y)]
-			
-			if max == 0:
-				max = intensity
-				max_coord = [i, int(y)]
-			else:
-				if intensity > max:
-					max = intensity
-					max_coord = [i, int(y)]
-		
-		max = 0
-		coords['pupil_coords'].append({'x': max_coord[0], 'y': max_coord[1]})
-		
-		right_start = right_eye_l[0] + 3
-		right_end = right_eye_r[0] - 3
-		for i in range(right_start, right_end+1):
-			y = (right_slope * i) + right_b
-			intensity = gray[i, int(y)]
-			
-			if max == 0:
-				max = intensity
-				max_coord = [i, int(y)]
-			else:
-				if intensity > max:
-					max = intensity
-					max_coord = [i, int(y)]
+		# using the right x and y coords, get the vertical line that crosses through this point 
+		# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
+		left_y_top = int(shape[38][1])
+		left_y_bottom = int(shape[40][1]) # this is a larger num than left_y_top because going down == increasing
+		new_left_y = self.estimate_vertical_loc(left_x, left_y_top + 2, left_y_bottom - 2, shape, gray)
+		coords['pupil_coords'].append({'x': left_x, 'y': new_left_y})
 
-		coords['pupil_coords'].append({'x': max_coord[0], 'y': max_coord[1]})
+		right_x, right_y = self.get_pupil_coord(shape[42], shape[45], gray)
+			
+		# using the right x and y coords, get the vertical line that crosses through this point 
+		# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
+		right_y_top = int(shape[44][1])
+		right_y_bottom = int(shape[46][1])
+		new_right_y = self.estimate_vertical_loc(right_x, right_y_top + 2, right_y_bottom - 2, shape, gray)
+		coords['pupil_coords'].append({'x': right_x, 'y': new_right_y})
 	
 		
 	def run(self):
@@ -156,18 +189,6 @@ class VStream(threading.Thread):
 					# might be helpful for pupil tracking: 
 					# https://stackoverflow.com/questions/45789549/track-eye-pupil-position-with-webcam-opencv-and-python
 					# this one looks really good: https://subscription.packtpub.com/book/application_development/9781785283932/4/ch04lvl1sec44/detecting-pupils
-					
-					# for pupil tracking:
-					# we know the landmark coord indices that match the eyes 
-					# so we can create a box approximation around where we thing the pupil should be? (just go along the middle of the eye section)
-					# then evaluate that area for where there's a contrast (left and right bound?)
-					# then return the middle of the left and right bound (of the section that's darker)
-					# so go from left of the box to the right side
-					# as you keep going note any significant change in color (that's something you have to decide)
-					# once you hit that point where there's a significant contrast, record it as the left bound
-					# and keep going until you either hit a lighter area again (mark as right bound) or hit the right end of the box
-					# take the middle of the left and right to estimate where the pupil is
-					# https://answers.opencv.org/question/173862/how-to-check-in-python-if-a-pixel-in-an-image-is-of-a-specific-color-other-than-black-and-white-for-grey-image/
 					
 					shape = self.predictor(gray, face)
 					shape = face_utils.shape_to_np(shape)

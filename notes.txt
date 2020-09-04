@@ -112,3 +112,9 @@ a couple days ago I discovered binary thresholding the grayscale and just checki
 the middle of the eye for intensity changes works pretty well for pupil detection! I think what I lacked last time was the binary
 threshold, which helps I think. need to check for vertical movement as well but it's much more stable and satisfactory than blob detection
 and contour checking so far.
+
+9/3/20
+the 'pupil-tracking' is mostly stable so far it seems but doesn't really track because I haven't got it to be very accurate, i.e.
+significant lateral and vertical movement isn't being captured very well.
+
+this might be helpful: https://thume.ca/projects/2012/11/04/simple-accurate-eye-center-tracking-in-opencv/
