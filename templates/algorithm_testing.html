@@ -814,41 +814,73 @@
 			slider.setAttribute('max', max);
 			slider.setAttribute('default', currVal);
 			slider.id = name;
+			
+			slider.addEventListener('input', function(evt){
+				let newVal = parseInt(evt.target.value);
+				
+				let index = parseInt(this.id.split('_')[0]);
+				let coord = null;
+				if(index >= facialLandmarks['landmark_coords'].length){
+					index = 2 - ((facialLandmarks['landmark_coords'].length + 2) % index);
+					coord = facialLandmarks['pupil_coords'][index];
+				}else{
+					coord = facialLandmarks['landmark_coords'][index];
+				}
+				
+				if(name.indexOf("x") > -1){
+					document.getElementById(name+"_label").textContent = "x: " + newVal;
+					coord.x = newVal;
+					
+				}else{
+					document.getElementById(name+"_label").textContent = "y: " + newVal;
+					coord.y = newVal;
+				}
+				
+				processLandmarkCoords(facialLandmarks);
+			});
+			
 			return slider;
 		}
 		
 		function setupLandmarkToggling(){
 			let container = document.getElementById('landmarkToggles');
+			let index = 0;
 			for(let key in facialLandmarks){
-				let index = 0;
 				let coords = facialLandmarks[key];
 				coords.forEach((coord) => {
-					let newCoord = document.createElement('div');
-					
-					let xSliderLabel = document.createElement('label');
-					xSliderLabel.textContent = "x: " + coord.x;
-					xSliderLabel.setAttribute('for', index + "_x");
-					
-					let ySliderLabel = document.createElement('label');
-					ySliderLabel.textContent = "y: " + coord.y;
-					ySliderLabel.setAttribute('for', index + "_y");
-					
-					let xSlider = createSlider(index + "_x", coord.x, 0, 400);
-					let ySlider = createSlider(index + "_y", coord.y, 0, 400);
-					
-					newCoord.appendChild(xSliderLabel);
-					newCoord.appendChild(xSlider);
-					newCoord.appendChild(document.createElement('br'));
-					newCoord.appendChild(ySliderLabel);
-					newCoord.appendChild(ySlider);
-					newCoord.style.width = "200px";
-					newCoord.style.margin = "0 auto";
-					
-					newCoord.style.border = "1px solid #000";
-					newCoord.style.marginBottom = "1%";
-					newCoord.style.padding = "3px";
-					
-					container.appendChild(newCoord);
+				
+					if(index >= facialLandmarks['landmark_coords'].length){
+				
+						let newCoord = document.createElement('div');
+						
+						let xSliderLabel = document.createElement('label');
+						xSliderLabel.id = index + "_x_label";
+						xSliderLabel.textContent = "x: " + coord.x;
+						xSliderLabel.setAttribute('for', index + "_x");
+						
+						let ySliderLabel = document.createElement('label');
+						ySliderLabel.id = index + "_y_label";
+						ySliderLabel.textContent = "y: " + coord.y;
+						ySliderLabel.setAttribute('for', index + "_y");
+						
+						let xSlider = createSlider(index + "_x", coord.x, 0, 400);
+						let ySlider = createSlider(index + "_y", coord.y, 0, 400);
+						
+						newCoord.appendChild(xSliderLabel);
+						newCoord.appendChild(xSlider);
+						newCoord.appendChild(document.createElement('br'));
+						newCoord.appendChild(ySliderLabel);
+						newCoord.appendChild(ySlider);
+						newCoord.style.width = "200px";
+						newCoord.style.margin = "0 auto";
+						
+						newCoord.style.border = "1px solid #000";
+						newCoord.style.marginBottom = "1%";
+						newCoord.style.padding = "3px";
+						
+						container.appendChild(newCoord);
+						
+					}
 					
 					index++;
 				});
