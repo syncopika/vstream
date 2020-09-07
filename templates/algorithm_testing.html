@@ -1,0 +1,1031 @@
+<html>
+	<!-- this does not rely on Flask. use python -m http.server -->
+	<head>
+		<title>vstream display - algorithm testing </title>
+		<script src='https://cdnjs.cloudflare.com/ajax/libs/three.js/108/three.min.js'></script>
+		<script src='../static/GLTFLoader.js'></script>
+	</head>
+	
+	<style>
+		#main{
+			font-family: monospace;
+			text-align: center;
+			top: 5%;
+			position: relative;
+			display: block;
+		}
+		canvas{
+			border: #000 solid 1px;
+		}
+		#container{
+			width: 400px;
+			height: 400px;
+			margin: 0 auto;
+			display: inline-block;
+		}
+	</style>
+	
+	<body>
+		<div id='main'>
+			<h3> vstream display </h3>
+			
+			<div id='show'>
+				<canvas id='display' width='400px' height='400px'>
+				</canvas>
+			
+				<div id='container'>
+				</div>
+			</div>
+			
+			<br />
+			<br />
+			
+			<button id='calibrate'> calibrate </button>
+			<button id='toggleStream'> pause/continue </button>
+			<!--<button id='toggleWireframe'> toggle wireframe </button>-->
+			<br />
+			
+			<div id='landmarkToggles'>
+				<h3> toggle landmark points </h3>
+			</div>
+			
+			
+		</div>
+	</body>
+
+
+	<script>
+	
+		/* notes 
+		
+			oooh this looks good: https://github.com/auduno/clmtrackr
+			this too: https://github.com/auduno/headtrackr
+		
+			potentially useful resources (mostly about morphing, but the warping step I think is really what we want):
+			https://www.cs.toronto.edu/~mangas/teaching/320/slides/CSC320T12.pdf
+			https://pdfs.semanticscholar.org/f528/d3e9ca5b8bf7e3b47aadce9f151a6467150a.pdf
+			https://www.cs.uaf.edu/~olawlor/academic/thesis/ref/chen93interpolation.pdf -> 2.2 looks very relevant
+			http://eeweb.poly.edu/~yao/EL5123/lecture12_ImageWarping.pdf
+			
+			https://stackoverflow.com/questions/28843938/three-js-how-to-create-new-morphing-geometry-if-i-have-all-necessary-buffers
+			
+		*/
+	
+		let streamPaused = false;
+		let calibrate = false;
+		let showWireframe = false;
+		
+		// maybe instead of anchor points, we just save all the points of the previous frame to compare with. :>
+		// let's use landmark coordinate number 27 and 30 (that's part of the nose)
+		let lastJawEndptDist = null;
+		let rightJawEnd = null;
+		let leftJawEnd = null;
+		let updateAnchorPoint = false;
+		let prevAnchor = null;
+		let currAnchor = null;
+		
+		const mapping = {}; // mapping important meshes to some info (i.e. baseline info)
+		
+
+		function getDistance(point1, point2){
+			return Math.sqrt(Math.pow((point2.x - point1.x),2) + Math.pow((point2.y - point1.y),2));
+		}
+		
+		// pass in 2 coordinates
+		// https://stackoverflow.com/questions/14066933/direct-way-of-computing-clockwise-angle-between-2-vectors
+		function getAngle(vec1, vec2){
+			let dot = (vec1.x * vec2.x) + (vec1.y * vec2.y);
+			let det = (vec1.x * vec2.y) - (vec1.y * vec2.x);
+			let angle = Math.atan2(det, dot) * (180 / Math.PI);
+			return angle;
+		}
+		
+		// set the initial nose/anchor point that we can use to figure out when a rotation is happening
+		function calibrateBaseline(landmarkData, pupilData, map){
+
+			// map points from landmark coords to face meshes
+			// this mapping thing should be configurable via a json file the user can import? 
+			// 'cause models can be different
+			// stuff like interpolation parameters should be configurable too 
+			for(let part in avatarParts){
+			
+				if(part === "mouth"){
+					// let's only care about the mouth corners and one top/bottom vert
+					let top = landmarkData[62];
+					let bottom = landmarkData[66];
+					let vertDist = getDistance(top, bottom);
+
+					let leftMouthCorner = landmarkData[60];
+					let rightMouthCorner = landmarkData[64];
+					let horzDist = getDistance(leftMouthCorner, rightMouthCorner);
+					
+					// record the distance between the bottom and top most mouth vertices
+					map['mouth'] = {
+						'vertical': {
+							'baseline': vertDist,
+							'previous': 0,
+							'interpolate': createInterpolation(vertDist, 0.0, vertDist*3, 1.0) // when vert dist increases, morph influence also increases
+																							   // note that the parameters here can determine the 'sensitivity' of the morph
+						},
+						'horizontal': {
+							'baseline': horzDist,
+							'previous': 0,
+							'interpolate': createInterpolation(horzDist, 0.0, horzDist*3, 1.0)
+						}
+					}
+				}
+				
+				// the actual 'left' eye when you're facing the screen
+				if(part === "leftEye"){
+					let top = landmarkData[38];
+					//let bottom = landmarkData[41];
+					let right = landmarkData[39]; // the right-most landmark of the left eye
+					let pupil = pupilData[0];
+					let horzDist = getDistance(pupil, right);
+					let vertDist = getDistance(pupil, top);
+					
+					map['leftEye'] = {
+						'horizontal': {
+							'baseline': horzDist,
+							'interpolate': createInterpolation(horzDist, 0.0, horzDist/3, 1.0) // but note this is going from the center of the eye socket towards the middle of the face. (moveleft shape key)
+						},
+						'vertical': {
+							'baseline': vertDist,
+							'interpolate': createInterpolation(vertDist, 0.0, vertDist*2, 1.0)
+						},
+						'previous': 0
+					}
+				}
+				
+				if(part === "rightEye"){
+					let top = landmarkData[44];
+					//let bottom = landmarkData[46];
+					let right = landmarkData[45];
+					let pupil = pupilData[1];
+					let horzDist = getDistance(pupil, right);
+					let vertDist = getDistance(pupil, top);
+					
+					map['rightEye'] = {
+						'horizontal': {
+							'baseline': horzDist,
+							'interpolate': createInterpolation(horzDist, 0.0, horzDist/3, 1.0) // but note this is going from the center of the eye socket towards the middle of the face. (moveleft shape key)
+						},
+						'vertical': {
+							'baseline': vertDist,
+							'interpolate': createInterpolation(vertDist, 0.0, vertDist*2, 1.0)
+						},
+						'previous': 0
+					}
+				}
+				
+				if(part === "leftEyebrow"){
+					// the eyebrow will be treated a little differently in that 
+					// I think using the rightmost coord of the left eyebrow (left when facing the screen,
+					// so the coord closest to the top of the line going down the nose)
+					// and the leftmost coord of the right eyebrow and comparing distance between the coord
+					// at the top of the nose can help
+					let middle = landmarkData[27];
+					let left = landmarkData[21];
+					let dist = getDistance(left, middle);
+					map['leftEyebrow'] = {
+						'dist': {
+							'baseline': dist,
+							'previous': 0
+						},
+						'interpolate': createInterpolation(dist, 0.0, dist/2, 1.0) // this causes an inverse relationship between X and Y!
+					}
+				}
+				
+				if(part === "rightEyebrow"){
+					let middle = landmarkData[27];
+					let right = landmarkData[22];
+					let dist = getDistance(right, middle);
+					map['rightEyebrow'] = {
+						'dist': {
+							'baseline': dist,
+							'previous': 0
+						},
+						'interpolate': createInterpolation(dist, 0.0, dist/2, 1.0)
+					}
+				}
+				
+				if(part === "head"){
+					// control blinking
+					
+					//handle left eye blink
+					// remember, going towards a morph influence value of 1.0 (full strength) means the eye is being closed
+					// 0.0 => eyes opened
+					let topLeft = landmarkData[38];
+					let bottomLeft = landmarkData[40];
+					let distLeft = getDistance(topLeft, bottomLeft);
+					map['leftEyeBlink'] = {
+						'dist': {
+							'baseline': distLeft,
+							'previous': 0
+						},
+						'interpolate': createInterpolation(distLeft, 0.0, distLeft/2, 1.0)
+					}
+					
+					//handle right eye blink
+					let topRight = landmarkData[44];
+					let bottomRight = landmarkData[46];
+					let distRight = getDistance(topRight, bottomRight);
+					map['rightEyeBlink'] = {
+						'dist': {
+							'baseline': distRight,
+							'previous': 0
+						},
+						'interpolate': createInterpolation(distRight, 0.0, distRight/2, 1.0)
+					}
+				}
+				
+			}
+
+		}
+		
+		// pass in x and y coords from 2d space
+		// because of how 2d canvas coordinates are (0,0 being the top left corner, no neg. coords),
+		// we need to convert so we can know where a 2d coord can get mapped to in 3d space
+		function convert2dCoords(x, y, width, height){
+			let newCoords = {};
+			if(x > width/2){
+				newCoords.x = x;
+			}
+		}
+	
+		
+		function inRange(x1, x2, rangeLimit){
+			return (x1 <= x2 + rangeLimit) && (x1 >= x2 - rangeLimit);
+		}
+		
+		document.getElementById('calibrate').addEventListener('click', (evt) => {
+			calibrate = !calibrate;
+		});
+		
+		
+		
+		//////////////////////////////////////////// three js stuff
+		
+		function getModel(modelFilePath, name){
+			console.log(modelFilePath);
+			return new Promise((resolve, reject) => {
+				loader.load(
+					modelFilePath,
+					function(gltf){
+						if(gltf.animations.length > 0){
+							console.log(gltf.animations);
+						}
+						let seen = new Set();
+						let faceParts = [];
+						gltf.scene.traverse((child) => {
+							if(child.type === "Mesh"){
+								
+								console.log(child);
+								let material = child.material;
+								let geometry = child.geometry;
+								let obj = new THREE.Mesh(geometry, material);
+								
+								// https://stackoverflow.com/questions/52569738/how-to-access-single-vertices-of-mesh-loaded-with-gltfloader-in-three-js
+								if(child.parent.name !== "Scene"){
+									if(!seen.has(child.parent.name)){
+										// this child is part of a group
+										child.parent.scale.x = child.parent.scale.x * 5;
+										child.parent.scale.y = child.parent.scale.y * 5;
+										child.parent.scale.z = child.parent.scale.z * 5;
+										faceParts.push(child.parent);
+										//console.log(child.parent);
+										seen.add(child.parent.name);
+									}
+								}else{
+									//console.log(child.name);
+									obj.scale.x = child.scale.x * 5;
+									obj.scale.y = child.scale.y * 5;
+									obj.scale.z = child.scale.z * 5;
+									obj.name = child.name;
+									faceParts.push(obj);
+								}
+								
+							}
+						});
+						resolve(faceParts);
+					},
+					// called while loading is progressing
+					function(xhr){
+						console.log( (xhr.loaded / xhr.total * 100) + '% loaded' );
+					},
+					// called when loading has errors
+					function(error){
+						console.log('An error happened');
+						console.log(error);
+						console.trace();
+					}
+				);
+			});
+		}
+		
+		const loader = new THREE.GLTFLoader();
+		let loadedModels = [];
+		
+		const avatarParts = {
+			"head": null,
+			"leftEyebrow": null,
+			"leftEye": null,
+			"rightEyebrow": null,
+			"rightEye": null,
+			"mouth": null
+		};
+		
+		const group = new THREE.Group();
+		let meshLoaded = false;
+		
+		const el = document.getElementById("container");
+		const renderer = new THREE.WebGLRenderer();
+		const fov = 60;
+		const camera = new THREE.PerspectiveCamera(fov, 1.0, 0.01, 1000);
+		const scene = new THREE.Scene();
+		scene.background = new THREE.Color(0xffffff);	
+		
+		renderer.shadowMap.enabled = true;
+		renderer.setSize(400, 400);	
+		el.appendChild(renderer.domElement);
+		
+		camera.position.set(0,2,25);
+		scene.add(camera);
+		
+		
+		// https://discourse.threejs.org/t/solved-glb-model-is-very-dark/6258
+		// should always use a hemisphere light!
+		var hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
+		hemiLight.position.set(0, 200, 0);
+		scene.add(hemiLight);
+	
+		var dirLight = new THREE.DirectionalLight( 0xffffff );
+		dirLight.position.set( 0, 100, -10);
+		scene.add( dirLight );
+		
+		loadedModels.push(getModel('../static/basic_avatar_head-edit5.gltf', 'avatar'));
+
+		Promise.all(loadedModels).then((objects) => {
+			objects.forEach((meshList) => {
+				
+				var count = 0;
+				
+				// note that i'm assuming a list of meshes coming in. change this later
+				meshList.forEach((mesh) => {
+					//console.log(mesh);
+					
+					if(showWireframe){
+						var wireframe = new THREE.WireframeGeometry(mesh.geometry);
+						var line = new THREE.LineSegments(wireframe);
+						line.material.depthTest = false;
+						line.material.opacity = .8;
+						line.material.transparent = true;
+						group.add(line);
+					}else{
+						group.add(mesh);
+					}
+				
+					bgAxesHelper = new THREE.AxesHelper(10);
+					group.add(bgAxesHelper);
+					
+					let theMesh = showWireframe ? line : mesh;
+					let meshGeometry = showWireframe ? line.geometry : mesh;  // kinda misleading...
+					
+					if(mesh.name === "head"){
+						// the head 
+						// note that for the current avatar, the head mesh controls blinking!!
+						avatarParts.head = meshGeometry;
+					}
+					
+					// loading the meshes is not always in the same order!!!
+					if(mesh.name === "rightEye"){
+						// right eye
+						theMesh.position.set(-3.5,2,0);
+						avatarParts.rightEye = meshGeometry; 
+					}
+					
+					if(mesh.name === "leftEye"){
+						// left eye
+						theMesh.position.set(3.5,2,0);
+						avatarParts.leftEye = meshGeometry;
+					}
+					
+					if(mesh.name === "leftEyebrow"){
+						// left eyebrow
+						theMesh.position.set(3.5,4.5,0);
+						avatarParts.leftEyebrow = meshGeometry;
+					}
+					
+					if(mesh.name === "rightEyebrow"){
+						// right eyebrow
+						theMesh.position.set(-3.5,4.5,0);
+						avatarParts.rightEyebrow = meshGeometry;
+					}
+					
+					if(mesh.name === "mouth"){
+						// mouth
+						theMesh.position.set(0,-5,0);
+						avatarParts.mouth = meshGeometry;
+					}
+					
+					count++;
+					
+					if(count === 6){
+						console.log(avatarParts);
+						group.position.set(0,0,0);
+						avatar = group;
+					
+						scene.add(group);
+
+						renderer.render(scene, camera);
+						meshLoaded = true;
+						
+						calibrate = true;
+						processLandmarkCoords(facialLandmarks);
+					}
+				});
+			});
+		});
+		
+		function clamp(val, min, max){
+			val = val > 1.0 ? 1.0 : val;
+			val = val < 0.0 ? 0.0 : val;
+			return val;
+		}
+		
+		// create a function that gets the interpolated y-value given an x for a specific 
+		// range (given by x1,y1 and x2,y2)
+		// https://en.wikipedia.org/wiki/Interpolation
+		function createInterpolation(x1, y1, x2, y2){
+			return function(newX){
+				return y1 + (newX - x1)*((y2-y1)/(x2-x1));
+			}
+		}
+		
+		function handleMouthMovement(mapping, landmark_data, avatarParts){
+			let mouthVertical = mapping['mouth'].vertical;
+			let mouthHorizontal = mapping['mouth'].horizontal;
+			
+			// what's the delta from the last distance or the baseline distance we got when we calibrated?
+			let lastVert;
+			let lastHorz;
+			lastVert = mouthVertical.previous === 0 ? mouthVertical.baseline : mouthVertical.previous;
+			lastHorz = mouthHorizontal.previous === 0 ? mouthHorizontal.baseline : mouthHorizontal.previous;
+			
+			let top2d = landmark_data[62];
+			let bottom2d = landmark_data[66];
+			let rightMouthCorner = landmark_data[64];
+			let leftMouthCorner = landmark_data[60];
+			
+			let currDistVert = getDistance(top2d, bottom2d);
+			let currDistHorz = getDistance(leftMouthCorner, rightMouthCorner);
+			
+			// try to prevent jittering
+			if(Math.abs(currDistVert - lastVert) < 1.7){
+				return; // don't move mouth for small changes
+			}
+			
+			let minDeltaVert = 0.8;
+			let minDeltaHorz = 0.5;
+			let deltaVert = currDistVert - mouthVertical.baseline;
+			let deltaHorz = currDistHorz - mouthHorizontal.baseline;
+			
+
+			if(Math.abs(deltaVert) > minDeltaVert){
+				let newVal = mapping.mouth.vertical.interpolate(currDistVert);
+				avatarParts.mouth.morphTargetInfluences[0] = clamp(newVal, 0, 1);
+				mapping.mouth.vertical.previous = currDistVert;
+			}
+			
+			// work on moving the ends of the mouth along the x axis as well!
+			// got shape keys! this is easy. just figure out the change in distance between the 2 mouth corners. yay
+			if(Math.abs(deltaHorz) > minDeltaHorz){
+				let newVal = mapping.mouth.horizontal.interpolate(currDistHorz);
+				avatarParts.mouth.morphTargetInfluences[2] = clamp(newVal, 0, 1);
+				mapping.mouth.horizontal.previous = currDistHorz;
+			}
+			
+			// support o mouth movement (i.e. forming an o)
+			// make sure we have some horizontal movement and vertical movement
+			if(currDistHorz <= mouthHorizontal.baseline - 2 && avatarParts.mouth.morphTargetInfluences[0] > 0.5){
+				// let's say baseline - 5.0 === maximum o mouth influence.
+				// max influence == 1, no influence == 0
+				// interpolation time 
+				let max = mouthHorizontal.baseline - 3; // the distance at which the o mouth will have maximum influence
+				let currVal = Math.min(currDistHorz / max, max);
+				avatarParts.mouth.morphTargetInfluences[1] = clamp(currVal, 0, 1);
+			}else{
+				avatarParts.mouth.morphTargetInfluences[1] = 0;
+			}
+		}
+		
+		function handleEyeMovement(mapping, landmark_data, avatarParts){
+			// this is actually controlling blinking! the head mesh has the morph targets for this.
+			// but we can store info about the eye coords in their respective mappings but just make sure to 
+			// affect the head's morph targets
+			
+			// ok so I made this a bit confusing, sorry -__-
+			// the shape key is closeEye so the larger the morph influence value, the more closed the eye gets.
+			// so 1.0 == closed eye, 0.0 == open eye.
+			
+			let leftEyeVertical = mapping['leftEyeBlink'].dist;
+			let rightEyeVertical = mapping['rightEyeBlink'].dist;
+			let lastVertLeft, lastVertRight;
+			let minDelta = 1.4;
+			
+			lastVertLeft = leftEyeVertical.previous === 0 ? leftEyeVertical.baseline : leftEyeVertical.previous;
+			lastVertRight = rightEyeVertical.previous === 0 ? rightEyeVertical.baseline : rightEyeVertical.previous;
+
+			let currDistLeft = getDistance(landmark_data[38], landmark_data[40]);
+			let currDistRight = getDistance(landmark_data[44], landmark_data[46]);
+			
+			let deltaVertLeft = (currDistLeft - lastVertLeft);
+			if(Math.abs(deltaVertLeft) > minDelta){		
+				let newVal = mapping.leftEyeBlink.interpolate(currDistLeft);		
+				avatarParts.head.morphTargetInfluences[0] = clamp(newVal, 0, 1); // left eye
+				mapping['leftEyeBlink'].dist.previous = currDistLeft;
+			}
+			
+			let deltaVertRight = (currDistRight - lastVertRight);
+			if(Math.abs(deltaVertRight) > minDelta){
+				let newVal = mapping.rightEyeBlink.interpolate(currDistRight);
+				avatarParts.head.morphTargetInfluences[1] = clamp(newVal, 0, 1);// right eye
+				mapping['rightEyeBlink'].dist.previous = currDistRight;
+			}
+		}
+		
+		function handleEyebrowMovement(mapping, landmark_data, avatarParts){		
+			let left = mapping.leftEyebrow.dist;
+			let right = mapping.rightEyebrow.dist;
+			let minDelta = 1.0;
+			
+			let leftPrev = left.previous === 0 ? left.baseline : left.previous;
+			let rightPrev = right.previous === 0 ? right.baseline : right.previous;
+			
+			let currDistLeft = getDistance(landmark_data[21], landmark_data[27]);
+			let currDistRight = getDistance(landmark_data[22], landmark_data[27]);
+			
+			
+			// hmmmm https://github.com/davisking/dlib/issues/1658
+			// forget the eyebrow raising for now
+			let deltaLeft = currDistLeft - left.baseline;
+			let deltaRight = currDistRight - right.baseline;
+			
+			// eyebrow down
+			// note that I don't think we actually need to remember the previous distance amount. just using the baseline may be enough
+			// with some interpolation. seems to work ok so far :)
+			if(Math.abs(deltaLeft) > minDelta){
+				// we need to move the eyebrow down
+				let newVal = mapping.leftEyebrow.interpolate(currDistLeft);
+				avatarParts.leftEyebrow.morphTargetInfluences[1] = clamp(newVal, 0, 1);
+				mapping.leftEyebrow.dist.previous = currDistLeft;
+			}
+			
+			if(Math.abs(deltaRight) > minDelta){
+				// we need to move the eyebrow down
+				let newVal = mapping.rightEyebrow.interpolate(currDistRight);
+				avatarParts.rightEyebrow.morphTargetInfluences[1] = clamp(newVal, 0, 1);
+				mapping.rightEyebrow.dist.previous = currDistRight;
+			}
+		}
+		
+		function handleEyeballMovement(mapping, landmark_data, pupil_data, avatarParts){
+			// each eyeball can move up, down, left, right
+			let minDelta = 1.8;
+					
+			let leftEyeTop = landmark_data[38];
+			let leftEyeRight = landmark_data[39];
+			let leftEyePupil = pupil_data[0];
+
+			let rightEyeTop = landmark_data[44];
+			let rightEyeRight = landmark_data[45];
+			let rightEyePupil = pupil_data[1];	
+
+			// handle left eye
+			let eyeLeftVertBase = mapping.leftEye.vertical.baseline;
+			let eyeLeftLatBase = mapping.leftEye.horizontal.baseline;
+			let eyeLeftVert = getDistance(leftEyePupil, leftEyeTop);
+			let eyeLeftLat = getDistance(leftEyePupil, leftEyeRight);
+			
+			if(Math.abs(eyeLeftVert - eyeLeftVertBase) > minDelta && 
+			   Math.abs(eyeLeftLat - eyeLeftLatBase) > minDelta){
+				// if vert > base, interpolate up 
+				// if vert < base..oh wait how do i differentiate between up and down. compare y vals?
+				// if new distance is smaller than baseline, we know the eyeball should be moving closer to the center of the face 
+				let leftHorzDir = (eyeLeftLat < eyeLeftLatBase) ? 1 : 0;
+				
+				// if new vert distance is smaller, eye should be moving towards the top
+				let leftVertDir = (eyeLeftVert < eyeLeftVertBase) ? 1 : 0;
+				
+				let newHorzVal = clamp(mapping.leftEye.horizontal.interpolate(eyeLeftLat), 0.0, 1.0);
+				if(leftHorzDir){
+					// use the moveRight shapekey - morphTargetInfluence[1]
+					avatarParts.leftEye.morphTargetInfluences[0] = 0.0;
+					avatarParts.leftEye.morphTargetInfluences[1] = newHorzVal;
+				}else{
+					// use the moveLeft shapekey - morphTargetInfluence[0]
+					avatarParts.leftEye.morphTargetInfluences[1] = 0.0;
+					avatarParts.leftEye.morphTargetInfluences[0] = newHorzVal;
+				}
+				
+				let newVertVal = clamp(mapping.leftEye.vertical.interpolate(eyeLeftVert), 0.0, 1.0);
+				if(!leftVertDir){
+					// move eyeball down - morphTargetInfluence[3]
+					avatarParts.leftEye.morphTargetInfluences[2] = 0.0;
+					avatarParts.leftEye.morphTargetInfluences[3] = newVertVal;
+				}else{
+					// move eyeball up - morphTargetInfluence[2]
+					avatarParts.leftEye.morphTargetInfluences[3] = 0.0;
+					avatarParts.leftEye.morphTargetInfluences[2] = newVertVal;
+				}
+			}
+			
+			// handle right eye
+			let eyeRightVertBase = mapping.rightEye.vertical.baseline;
+			let eyeRightLatBase = mapping.rightEye.horizontal.baseline;
+			let eyeRightVert = getDistance(rightEyePupil, rightEyeTop);
+			let eyeRightLat = getDistance(rightEyePupil, rightEyeRight);
+
+			if(Math.abs(eyeRightVert - eyeRightVertBase) > minDelta && 
+			   Math.abs(eyeRightLat - eyeRightLatBase) > minDelta){
+				
+				let rightHorzDir = (eyeRightLat < eyeRightLatBase) ? 1 : 0;
+				let rightVertDir = (eyeRightVert < eyeRightVertBase) ? 1 : 0;
+				
+				newHorzVal = clamp(mapping.rightEye.horizontal.interpolate(eyeRightLat), 0.0, 1.0);
+				if(rightHorzDir){
+					// use the moveRight shapekey - morphTargetInfluence[1]
+					avatarParts.rightEye.morphTargetInfluences[0] = 0.0;
+					avatarParts.rightEye.morphTargetInfluences[1] = newHorzVal;
+				}else{
+					// use the moveLeft shapekey - morphTargetInfluence[0]
+					avatarParts.rightEye.morphTargetInfluences[1] = 0.0;
+					avatarParts.rightEye.morphTargetInfluences[0] = newHorzVal;
+				}
+				
+				newVertVal = clamp(mapping.rightEye.vertical.interpolate(eyeRightVert), 0.0, 1.0)
+				if(!rightVertDir){
+					// move eyeball down - morphTargetInfluence[3]
+					//avatarParts.rightEye.morphTargetInfluences[2] = 0.0;
+					avatarParts.rightEye.morphTargetInfluences[3] = newVertVal;
+				}else{
+					// move eyeball up - morphTargetInfluence[2]
+					avatarParts.rightEye.morphTargetInfluences[3] = 0.0;
+					avatarParts.rightEye.morphTargetInfluences[2] = newVertVal;
+				}
+			}
+		}
+	
+		///////////////////////////////////////////////////////////
+		
+		function updateCanvas(landmark_data, pupil_coords, context){
+			// clear the canvas 
+			context.clearRect(0, 0, 400, 400);
+			
+			// draw on the canvas 
+			landmark_data.forEach((coord) => {
+				context.fillRect(coord.x, coord.y, 2, 2);
+			});
+			
+			pupil_coords.forEach((coord) => {
+				context.fillRect(coord.x, coord.y, 3, 3);
+			});
+			
+			// connect the dots
+			// fortunately, the coords should be organized so it's easy to connect the parts
+			// see: https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
+			let coordsToSkip = new Set([16, 21, 26, 35, 41, 47, 67]); // 7 regions === 7 lines to draw
+			for(let i = 0; i <= landmark_data.length-1; i++){
+				// do not connect the last coord for each facial region (i.e. mouth, node, jaw, etc.) to anything
+				
+				// fix mouth (special case) 
+				if(i === 67){
+					// needs to connect with 60
+					context.beginPath();
+					context.moveTo(landmark_data[i].x, landmark_data[i].y);
+					context.lineTo(landmark_data[60].x, landmark_data[60].y);
+					context.stroke();
+				}else if(coordsToSkip.has(i)){
+					continue;
+				}else{
+					let x = landmark_data[i].x;
+					let y = landmark_data[i].y;
+					let x2 = landmark_data[i+1].x;
+					let y2 = landmark_data[i+1].y;
+					context.beginPath();
+					context.moveTo(x, y);
+					context.lineTo(x2, y2);
+					context.stroke();
+				}
+			}
+		}
+	
+		let movingForwards = false;
+		let movingBackwards = false;
+		let zRotateLeft = false;
+		let zRotateRight = false;
+		let yRotateLeft = false;
+		let yRotateRight = false;
+		
+		let prevCoordPositions = {};
+		
+		
+		const facialLandmarks = {
+			"landmark_coords": [
+				{"x": 170, "y": 154}, 
+				{"x": 171, "y": 168}, 
+				{"x": 174, "y": 180}, 
+				{"x": 178, "y": 192}, 
+				{"x": 183, "y": 204}, 
+				{"x": 190, "y": 214}, 
+				{"x": 198, "y": 222}, 
+				{"x": 207, "y": 229}, 
+				{"x": 217, "y": 231}, 
+				{"x": 228, "y": 229}, 
+				{"x": 238, "y": 224}, 
+				{"x": 246, "y": 216}, 
+				{"x": 253, "y": 207}, 
+				{"x": 258, "y": 195}, 
+				{"x": 262, "y": 183}, 
+				{"x": 265, "y": 171}, 
+				{"x": 267, "y": 158}, 
+				{"x": 178, "y": 143}, 
+				{"x": 185, "y": 136}, 
+				{"x": 195, "y": 135}, 
+				{"x": 204, "y": 137}, 
+				{"x": 213, "y": 141}, 
+				{"x": 228, "y": 140}, 
+				{"x": 236, "y": 137}, 
+				{"x": 246, "y": 136}, 
+				{"x": 256, "y": 139}, 
+				{"x": 261, "y": 146}, 
+				{"x": 220, "y": 152}, 
+				{"x": 220, "y": 160}, 
+				{"x": 220, "y": 168}, 
+				{"x": 220, "y": 177}, 
+				{"x": 209, "y": 184}, 
+				{"x": 214, "y": 186}, 
+				{"x": 219, "y": 187}, 
+				{"x": 224, "y": 186}, 
+				{"x": 229, "y": 185}, 
+				{"x": 189, "y": 153}, 
+				{"x": 194, "y": 150}, 
+				{"x": 201, "y": 150}, 
+				{"x": 206, "y": 154}, 
+				{"x": 200, "y": 156}, 
+				{"x": 194, "y": 155}, 
+				{"x": 233, "y": 156}, 
+				{"x": 239, "y": 152}, 
+				{"x": 246, "y": 152}, 
+				{"x": 251, "y": 155}, 
+				{"x": 246, "y": 158}, 
+				{"x": 239, "y": 157}, 
+				{"x": 203, "y": 203},
+				{"x": 209, "y": 200}, 
+				{"x": 215, "y": 197}, 
+				{"x": 219, "y": 199}, 
+				{"x": 223, "y": 198}, 
+				{"x": 229, "y": 201}, 
+				{"x": 235, "y": 205}, 
+				{"x": 229, "y": 209}, 
+				{"x": 223, "y": 211}, 
+				{"x": 219, "y": 211}, 
+				{"x": 214, "y": 211}, 
+				{"x": 209, "y": 208}, 
+				{"x": 206, "y": 204}, 
+				{"x": 215, "y": 203}, 
+				{"x": 219, "y": 203}, 
+				{"x": 223, "y": 203}, 
+				{"x": 232, "y": 205}, 
+				{"x": 223, "y": 204}, 
+				{"x": 219, "y": 205}, 
+				{"x": 215, "y": 204}
+			], 
+			"pupil_coords": [
+				{"x": 197, "y": 152}, 
+				{"x": 242, "y": 154}
+			]
+		};
+		
+		function createSlider(name, currVal, min, max){
+			let slider = document.createElement('input');
+			slider.setAttribute('type', 'range')
+			slider.setAttribute('min', min);
+			slider.setAttribute('max', max);
+			slider.setAttribute('default', currVal);
+			slider.id = name;
+			return slider;
+		}
+		
+		function setupLandmarkToggling(){
+			let container = document.getElementById('landmarkToggles');
+			for(let key in facialLandmarks){
+				let index = 0;
+				let coords = facialLandmarks[key];
+				coords.forEach((coord) => {
+					let newCoord = document.createElement('div');
+					
+					let xSliderLabel = document.createElement('label');
+					xSliderLabel.textContent = "x: " + coord.x;
+					xSliderLabel.setAttribute('for', index + "_x");
+					
+					let ySliderLabel = document.createElement('label');
+					ySliderLabel.textContent = "y: " + coord.y;
+					ySliderLabel.setAttribute('for', index + "_y");
+					
+					let xSlider = createSlider(index + "_x", coord.x, 0, 400);
+					let ySlider = createSlider(index + "_y", coord.y, 0, 400);
+					
+					newCoord.appendChild(xSliderLabel);
+					newCoord.appendChild(xSlider);
+					newCoord.appendChild(document.createElement('br'));
+					newCoord.appendChild(ySliderLabel);
+					newCoord.appendChild(ySlider);
+					newCoord.style.width = "200px";
+					newCoord.style.margin = "0 auto";
+					
+					newCoord.style.border = "1px solid #000";
+					newCoord.style.marginBottom = "1%";
+					newCoord.style.padding = "3px";
+					
+					container.appendChild(newCoord);
+					
+					index++;
+				});
+			}
+		}
+		setupLandmarkToggling();
+		
+		// handle receiving facial landmark coordinate data 
+		function processLandmarkCoords(data){
+			let theData = data;
+			let landmark_data = theData['landmark_coords'];
+			let pupil_coords = theData['pupil_coords'];
+			
+			if(meshLoaded && landmark_data.length > 0){
+			
+				////////// start movement calculation stuff (i.e. determine how to rotate/translate head)
+				if(calibrate){
+					calibrate = !calibrate;
+					prevAnchor = landmark_data[27];
+					calibrateBaseline(landmark_data, pupil_coords, mapping); // mapping defined above as empty dictionary
+				}
+			
+				rightJawEnd = landmark_data[0];
+				leftJawEnd = landmark_data[16];
+				if(lastJawEndptDist === null){
+					lastJawEndptDist = getDistance(leftJawEnd, rightJawEnd);
+				}else{
+					// note! moving the head up and down can trigger similar changes to moving backwards/forwards :<
+					let currDist = getDistance(leftJawEnd, rightJawEnd);
+					
+					// how much room can we give before something is actually considered moving towards or away from the cam?
+					// we should allow for some small dist changes before translating the avatar forwards or backwards
+					if(currDist < lastJawEndptDist - 3){
+						// moving backwards / away from camera 
+						// by how much?
+						movingBackwards = true;
+						//document.getElementById('currentAction').textContent = "moving backwards...";
+					}else if(currDist > lastJawEndptDist + 3){
+						// moving forwards / towards camera
+						//document.getElementById('currentAction').textContent = "moving forwards...";
+						movingForwards = true;
+					}
+					
+					// reset
+					lastJawEndptDist = currDist;
+				}
+				
+
+				if(mapping['mouth']){
+					// now that we have shape keys for mouth movement, we only need to worry about how much we need to set the morphInfluence as given 
+					// the current state of the facial landmarks 
+					// but wait!! what about scaling? i.e. at calibration the face is at a certain distance from the camera, which affects the distance between 
+					// points, right? wouldn't it be good to have some kind of scaling so we don't miscalculate?
+					handleMouthMovement(mapping, landmark_data, avatarParts);
+				}
+				
+				if(mapping['leftEye'] && mapping['rightEye']){
+					handleEyeMovement(mapping, landmark_data, avatarParts);
+					handleEyeballMovement(mapping, landmark_data, pupil_coords, avatarParts);
+				}
+				
+				if(mapping['leftEyebrow'] && mapping['rightEyebrow']){
+					handleEyebrowMovement(mapping, landmark_data, avatarParts);
+				}
+				
+				
+				// are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts sideways
+				if(prevAnchor){
+				
+					currAnchor = landmark_data[27]; // we just need one point?
+
+					//let currAnchor2 = landmark_data[30];
+					let angle = getAngle(currAnchor, prevAnchor);
+					
+					if(Math.abs(angle) > 2 && !(inRange(leftJawEnd.y, rightJawEnd.y, 3.0))){
+						//document.getElementById('zAxisRotation').textContent = "rotate about z-axis! angle: " + angle + " degrees.";
+						updateAnchorPoint = true;
+						if(angle > 0){
+							zRotateRight = true;
+						}else{
+							zRotateLeft = true; 
+						}
+					}
+				}
+				
+				// are we rotating about the y-axis (axis going up/down). captures head rotation when looking left/right
+				// look at distance between nose point and jaw endpoints
+				// uh but what if the head is tilted??? we can use the jaw endpoints to help (look at their y-values?)
+				if(prevAnchor){
+				
+					currAnchor = landmark_data[27]; // we just need one point?
+					
+					// need to make sure the jaw endpoints are pretty much at the same level 
+					// and check to see that the curr anchor pt. is 
+					let diff = currAnchor.x - prevAnchor.x;
+					let turnDirection = diff > 0.0 ? "left" : "right";
+					
+					if(inRange(leftJawEnd.y, rightJawEnd.y, 1.0) && !(inRange(currAnchor.x, prevAnchor.x, 2.0))){
+						// if the curr pos of currAnchor1 is more than a certain amount away from the prev anchorPoint along the x-axis
+						// and as long as the y-coords of the jaw endpoints are pretty similar
+						updateAnchorPoint = true;
+						if(turnDirection === "left"){
+							yRotateLeft = true;
+						}else{
+							yRotateRight = true;
+						}
+					}
+					
+				}
+				
+				
+				// are we rotating about the x-axis (axis going left/right). captures nodding motions.
+				// can use nose anchor point and just check y-axis?
+				if(updateAnchorPoint){
+					prevAnchor = currAnchor;
+					updateAnchorPoint = false;
+				}
+				
+				
+				// are we translating the head? i.e. moving the head left/right without any rotations?
+				// just sample a few points and get the diff?
+				
+				/////////// end movement calculation stuff
+				
+				
+				// update canvas with landmark coordinates
+				let canvas = document.getElementById("display");
+				let context = canvas.getContext("2d");
+				updateCanvas(landmark_data, pupil_coords, context);
+
+
+				// move avatar closer or away from camera
+				/*
+				if(movingForwards){
+					// just update camera!
+					camera.translateZ(-1.0);
+					movingForwards = false;
+				}else if(movingBackwards){
+					movingBackwards = false;
+					camera.translateZ(1.0);
+				}*/
+				
+				/* rotate about z axis
+				if(zRotateLeft){
+					if(group.rotation.z < (Math.PI / 3)){
+						group.rotateOnWorldAxis(new THREE.Vector3(0,0,1), Math.PI / 8);
+					}
+					zRotateLeft = false;
+				}else if(zRotateRight){
+					if(group.rotation.z > (-Math.PI / 3)){
+						group.rotateOnWorldAxis(new THREE.Vector3(0,0,1), -Math.PI / 8);
+					}
+					zRotateRight = false;
+				}*/
+				
+				
+				/* rotate about y axis
+				if(yRotateLeft){
+					if(group.rotation.y < (Math.PI / 3)){
+						// clamp the rotation
+						group.rotateOnWorldAxis(new THREE.Vector3(0,1,0), Math.PI / 8);
+					}
+					yRotateLeft = false;
+				}else if(yRotateRight){
+					if(group.rotation.y > (-Math.PI / 3)){
+						group.rotateOnWorldAxis(new THREE.Vector3(0,1,0), -Math.PI / 8);
+					}
+					yRotateRight = false;
+				}
+				*/
+				
+				renderer.render(scene, camera);
+			}
+		}
+		
+	</script>
+
+
+
+</html>

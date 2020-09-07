@@ -1,4 +1,6 @@
-  <html>
+<!-- used with basic_test.py -->
+  
+<html>
 
 	<head>
 		<title>vstream display</title>
@@ -60,6 +62,8 @@
 		// handle receiving facial landmark coordinate data 
 		socket.on('landmarkCoordinates', (data) => {
 			let theData = JSON.parse(data);
+			console.log(theData);
+			console.log(data);
 			let landmark_data = theData['landmark_coords'];
 			let pupil_coords = theData['pupil_coords'];
 			let canvas = document.getElementById("display");
