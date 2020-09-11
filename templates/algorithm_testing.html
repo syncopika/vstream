@@ -632,7 +632,7 @@
 		
 		function handleEyeballMovement(mapping, landmark_data, pupil_data, avatarParts){
 			// each eyeball can move up, down, left, right
-			let minDelta = 0.5;
+			let minDelta = 0.3;
 					
 			let leftEyeTop = landmark_data[38];
 			let leftEyeRight = landmark_data[39];
@@ -672,10 +672,16 @@
 				// handling vertical movement if pupil is on the right side
 				
 				// get baseline vector 
-				let baselineVec = {'x': leftEyeRight.x - mapping.leftEye.baselineCoords.x, 'y': leftEyeRight.y - mapping.leftEye.baselineCoords.y};
+				let baselineVec = {
+					'x': leftEyeRight.x - mapping.leftEye.baselineCoords.x, 
+					'y': leftEyeRight.y - mapping.leftEye.baselineCoords.y
+				};
 				
 				// get current vector 
-				let currVec = {'x': leftEyePupil.x - mapping.leftEye.baselineCoords.x, 'y': leftEyePupil.y - mapping.leftEye.baselineCoords.y};
+				let currVec = {
+					'x': leftEyePupil.x - mapping.leftEye.baselineCoords.x, 
+					'y': leftEyePupil.y - mapping.leftEye.baselineCoords.y
+				};
 				
 				// cross product the vectors to know if the pupil is below or above the baseline vector
 				let crossProd = (baselineVec.x*currVec.y) - (baselineVec.y*currVec.x);
@@ -686,6 +692,8 @@
 					avatarParts.leftEye.morphTargetInfluences[2] = newVertVal;
 				}else if(crossProd === 0){
 					//console.log("no vertical movement for pupil! crossProd is: " + crossProd);
+					avatarParts.leftEye.morphTargetInfluences[3] = 0.0;
+					avatarParts.leftEye.morphTargetInfluences[2] = 0.0;
 				}else{
 					//console.log("moving pupil DOWN! crossProd is: " + crossProd);
 					let newVertVal = clamp(mapping.leftEye.vertical.bottom.interpolate(eyeLeftVertBottom), 0.0, 1.0);
@@ -868,6 +876,7 @@
 			slider.setAttribute('type', 'range')
 			slider.setAttribute('min', min);
 			slider.setAttribute('max', max);
+			slider.setAttribute('step', 0.1);
 			slider.setAttribute('default', currVal);
 			slider.id = name;
 			
@@ -919,8 +928,8 @@
 						ySliderLabel.textContent = "y: " + coord.y;
 						ySliderLabel.setAttribute('for', index + "_y");
 						
-						let xSlider = createSlider(index + "_x", coord.x, 0, 400);
-						let ySlider = createSlider(index + "_y", coord.y, 0, 400);
+						let xSlider = createSlider(index + "_x", coord.x, coord.x - 5, coord.x + 5);
+						let ySlider = createSlider(index + "_y", coord.y, coord.y - 5, coord.y + 5);
 						
 						newCoord.appendChild(xSliderLabel);
 						newCoord.appendChild(xSlider);
