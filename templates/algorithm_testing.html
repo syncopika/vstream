@@ -162,11 +162,11 @@
 						'vertical': {
 							'top': {
 								'baseline': vertTopDist,
-								'interpolate': createInterpolation(vertTopDist, 0.0, 0.0, 1.0)
+								'interpolate': createInterpolation(pupil.y, 0.0, top.y, 1.0)
 							},
 							'bottom': {
 								'baseline': vertBottomDist,
-								'interpolate': createInterpolation(vertBottomDist, 0.0, 0.0, 1.0)
+								'interpolate': createInterpolation(pupil.y, 0.0, bottom.y, 1.0)
 							}
 						},
 						'baselineCoords': {
@@ -204,11 +204,11 @@
 						'vertical': {
 							'top': {
 								'baseline': vertTopDist,
-								'interpolate': createInterpolation(vertTopDist, 0.0, 0.0, 1.0)
+								'interpolate': createInterpolation(pupil.y, 0.0, top.y, 1.0)
 							},
 							'bottom': {
 								'baseline': vertBottomDist,
-								'interpolate': createInterpolation(vertBottomDist, 0.0, 0.0, 1.0)
+								'interpolate': createInterpolation(pupil.y, 0.0, bottom.y, 1.0)
 							}
 						},
 						'baselineCoords': {
@@ -632,13 +632,19 @@
 		
 		function handleEyeballMovement(mapping, landmark_data, pupil_data, avatarParts){
 			// each eyeball can move up, down, left, right
-			let minDelta = 0.3;
+			let minDelta = 0.2;
 					
 			let leftEyeTop = landmark_data[38];
 			let leftEyeRight = landmark_data[39];
 			let leftEyePupil = pupil_data[0];
 			let leftEyeBottom = landmark_data[40];
 			let leftEyeLeft = landmark_data[36];
+			
+			let rightEyeTop = landmark_data[44];
+			let rightEyeRight = landmark_data[45];
+			let rightEyePupil = pupil_data[1];
+			let rightEyeBottom = landmark_data[46];
+			let rightEyeLeft = landmark_data[42];
 
 			// handle left eye
 			let eyeLeftVertTopBase = mapping.leftEye.vertical.top.baseline;
@@ -647,8 +653,8 @@
 			let eyeLeftHorzRightBase = mapping.leftEye.horizontal.right.baseline;
 
 			
-			let eyeLeftVertTop = getDistance(leftEyePupil, leftEyeTop);
-			let eyeLeftVertBottom = getDistance(leftEyePupil, leftEyeBottom);
+			//let eyeLeftVertTop = getDistance(leftEyePupil, leftEyeTop);
+			//let eyeLeftVertBottom = getDistance(leftEyePupil, leftEyeBottom);
 			let eyeLeftHorzRight = getDistance(leftEyePupil, leftEyeRight);
 			let eyeLeftHorzLeft = getDistance(leftEyePupil, leftEyeLeft);
 			
@@ -667,77 +673,87 @@
 			}
 			
 			// handle vertical movement
-			// figure out what side
-			if(mapping.leftEye.baselineCoords.x <= leftEyePupil.x){
-				// handling vertical movement if pupil is on the right side
-				
-				// get baseline vector 
-				let baselineVec = {
-					'x': leftEyeRight.x - mapping.leftEye.baselineCoords.x, 
-					'y': leftEyeRight.y - mapping.leftEye.baselineCoords.y
-				};
-				
-				// get current vector 
-				let currVec = {
-					'x': leftEyePupil.x - mapping.leftEye.baselineCoords.x, 
-					'y': leftEyePupil.y - mapping.leftEye.baselineCoords.y
-				};
-				
-				// cross product the vectors to know if the pupil is below or above the baseline vector
-				let crossProd = (baselineVec.x*currVec.y) - (baselineVec.y*currVec.x);
-				if(crossProd < 0){
-					//console.log("moving pupil UP! crossProd is: " + crossProd);
-					let newVertVal = clamp(mapping.leftEye.vertical.top.interpolate(eyeLeftVertTop), 0.0, 1.0);
-					avatarParts.leftEye.morphTargetInfluences[3] = 0.0;
-					avatarParts.leftEye.morphTargetInfluences[2] = newVertVal;
-				}else if(crossProd === 0){
-					//console.log("no vertical movement for pupil! crossProd is: " + crossProd);
-					avatarParts.leftEye.morphTargetInfluences[3] = 0.0;
-					avatarParts.leftEye.morphTargetInfluences[2] = 0.0;
-				}else{
-					//console.log("moving pupil DOWN! crossProd is: " + crossProd);
-					let newVertVal = clamp(mapping.leftEye.vertical.bottom.interpolate(eyeLeftVertBottom), 0.0, 1.0);
-					avatarParts.leftEye.morphTargetInfluences[2] = 0.0;
-					avatarParts.leftEye.morphTargetInfluences[3] = newVertVal;
-				}
-			}
-
+			// handling vertical movement for left eye
+			let baselineVec = {
+				'x': leftEyeRight.x - mapping.leftEye.baselineCoords.x, 
+				'y': leftEyeRight.y - mapping.leftEye.baselineCoords.y
+			};
 			
-			/* handle right eye
+			// get current vector 
+			let currVec = {
+				'x': leftEyePupil.x - mapping.leftEye.baselineCoords.x, 
+				'y': leftEyePupil.y - mapping.leftEye.baselineCoords.y
+			};
+			
+			// cross product the vectors to know if the pupil is below or above the baseline vector
+			let crossProd = (baselineVec.x*currVec.y) - (baselineVec.y*currVec.x);
+			if(crossProd < 0){
+				//console.log("moving pupil UP! crossProd is: " + crossProd);
+				let newVertVal = clamp(mapping.leftEye.vertical.top.interpolate(leftEyePupil.y), 0.0, 1.0);
+				avatarParts.leftEye.morphTargetInfluences[3] = 0.0;
+				avatarParts.leftEye.morphTargetInfluences[2] = newVertVal;
+			}else if(crossProd === 0){
+				//console.log("no vertical movement for pupil! crossProd is: " + crossProd);
+				avatarParts.leftEye.morphTargetInfluences[3] = 0.0;
+				avatarParts.leftEye.morphTargetInfluences[2] = 0.0;
+			}else{
+				//console.log("moving pupil DOWN! crossProd is: " + crossProd);
+				let newVertVal = clamp(mapping.leftEye.vertical.bottom.interpolate(leftEyePupil.y), 0.0, 1.0);
+				avatarParts.leftEye.morphTargetInfluences[2] = 0.0;
+				avatarParts.leftEye.morphTargetInfluences[3] = newVertVal;
+			}
+			
+
+			// handle right eye	
+			let eyeRightVertTopBase = mapping.rightEye.vertical.top.baseline;
+			let eyeRightVertBottomBase = mapping.rightEye.vertical.bottom.baseline;
+			let eyeRightHorzLeftBase = mapping.rightEye.horizontal.left.baseline;
+			let eyeRightHorzRightBase = mapping.rightEye.horizontal.right.baseline;
+
+			let eyeRightHorzRight = getDistance(rightEyePupil, rightEyeRight);
+			let eyeRightHorzLeft = getDistance(rightEyePupil, rightEyeLeft);
+			
 			let eyeRightVertBase = mapping.rightEye.vertical.baseline;
 			let eyeRightLatBase = mapping.rightEye.horizontal.baseline;
 			let eyeRightVert = getDistance(rightEyePupil, rightEyeTop);
 			let eyeRightLat = getDistance(rightEyePupil, rightEyeRight);
-
-			if(Math.abs(eyeRightVert - eyeRightVertBase) > minDelta && 
-			   Math.abs(eyeRightLat - eyeRightLatBase) > minDelta){
-				
-				let rightHorzDir = (eyeRightLat < eyeRightLatBase) ? 1 : 0;
-				let rightVertDir = (eyeRightVert < eyeRightVertBase) ? 1 : 0;
-				
-				newHorzVal = clamp(mapping.rightEye.horizontal.interpolate(eyeRightLat), 0.0, 1.0);
-				if(rightHorzDir){
-					// use the moveRight shapekey - morphTargetInfluence[1]
-					avatarParts.rightEye.morphTargetInfluences[0] = 0.0;
-					avatarParts.rightEye.morphTargetInfluences[1] = newHorzVal;
-				}else{
-					// use the moveLeft shapekey - morphTargetInfluence[0]
-					avatarParts.rightEye.morphTargetInfluences[1] = 0.0;
-					avatarParts.rightEye.morphTargetInfluences[0] = newHorzVal;
-				}
-				
-				newVertVal = clamp(mapping.rightEye.vertical.interpolate(eyeRightVert), 0.0, 1.0)
-				if(!rightVertDir){
-					// move eyeball down - morphTargetInfluence[3]
-					//avatarParts.rightEye.morphTargetInfluences[2] = 0.0;
-					avatarParts.rightEye.morphTargetInfluences[3] = newVertVal;
-				}else{
-					// move eyeball up - morphTargetInfluence[2]
-					avatarParts.rightEye.morphTargetInfluences[3] = 0.0;
-					avatarParts.rightEye.morphTargetInfluences[2] = newVertVal;
-				}
+			
+			if(mapping.rightEye.baselineCoords.x <= rightEyePupil.x){
+				// moving the pupil to the right
+				let newHorzVal = clamp(mapping.rightEye.horizontal.right.interpolate(eyeRightHorzRight), 0.0, 1.0);				
+				avatarParts.rightEye.morphTargetInfluences[0] = 0.0;
+				avatarParts.rightEye.morphTargetInfluences[1] = newHorzVal;
+			}else if(mapping.rightEye.baselineCoords.x > rightEyePupil.x){
+				// moving the pupil to the left
+				let newHorzVal = clamp(mapping.rightEye.horizontal.left.interpolate(eyeRightHorzLeft), 0.0, 1.0);				
+				avatarParts.rightEye.morphTargetInfluences[1] = 0.0;
+				avatarParts.rightEye.morphTargetInfluences[0] = newHorzVal;				
 			}
-			*/
+			
+			// get current vector 
+			let currVecRight = {
+				'x': rightEyePupil.x - mapping.rightEye.baselineCoords.x, 
+				'y': rightEyePupil.y - mapping.rightEye.baselineCoords.y
+			};
+			
+			// cross product the vectors to know if the pupil is below or above the baseline vector
+			let crossProdRight = (baselineVec.x*currVecRight.y) - (baselineVec.y*currVecRight.x);
+			if(crossProdRight < 0){
+				//console.log("moving pupil UP! crossProd is: " + crossProd);
+				let newVertVal = clamp(mapping.rightEye.vertical.top.interpolate(rightEyePupil.y), 0.0, 1.0);
+				avatarParts.rightEye.morphTargetInfluences[3] = 0.0;
+				avatarParts.rightEye.morphTargetInfluences[2] = newVertVal;
+			}else if(crossProdRight === 0){
+				//console.log("no vertical movement for pupil! crossProd is: " + crossProd);
+				avatarParts.rightEye.morphTargetInfluences[3] = 0.0;
+				avatarParts.rightEye.morphTargetInfluences[2] = 0.0;
+			}else{
+				//console.log("moving pupil DOWN! crossProd is: " + crossProd);
+				let newVertVal = clamp(mapping.rightEye.vertical.bottom.interpolate(rightEyePupil.y), 0.0, 1.0);
+				avatarParts.rightEye.morphTargetInfluences[2] = 0.0;
+				avatarParts.rightEye.morphTargetInfluences[3] = newVertVal;
+			}
+		
 		}
 	
 		///////////////////////////////////////////////////////////
