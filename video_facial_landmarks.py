@@ -79,10 +79,10 @@ def estimate_vertical_loc(x_coord, y_top, y_bottom, shape, gray):
 	
 	for i in range(y_top, y_bottom):
 		intensity = gray[x_coord, i]
-		if intensity > curr_intensity:
+		if intensity > (curr_intensity + 5):
 			curr_intensity = intensity
 			max_start_y = i
-		elif intensity < curr_intensity:
+		elif intensity < (curr_intensity - 5):
 			max_end_y = i
 			
 	new_y = y_top + int((max_end_y - max_start_y) / 2)
@@ -95,28 +95,28 @@ def	get_pupil_coord(landmark1, landmark2, gray):
 	point1 = (int(landmark1[0]), int(landmark1[1]))
 	point2 = (int(landmark2[0]), int(landmark2[1]))
 	slope = (point2[1] - point1[1]) / (point2[0] - point1[0])
-	intercept = point1[1] - (slope * point1[0]) # y-intercept from y=mx+b
-	
-	start = point1[0] + 2
+	intercept = point1[1] - (slope * point1[0]) # y-intercept (i.e. b) from y=mx+b
+
+	start = point1[0] + 2 # use the x-coord to go from start to end 
 	end = point2[0] - 2
-	max = 0 # we're looking for the peak of intensity given 
-	max_coord_start = (start, (slope * start) + intercept)
+	max = 0 # we're looking for the peak of intensity given. since we're working with binary colors, 0 == peak (black) and 255 is everything else (white) 
+	max_coord_start = None #(start, (slope * start) + intercept)
 	max_coord_end = (start, (slope * start) + intercept)
 	
 	for i in range(start, end+1):
 		y = (slope * i) + intercept
 		intensity = gray[i, int(y)]
-		
+
 		# note that you run the risk here of miscounting the right place if 
 		# the point you start at happens to be a dark spot (i.e. the left corner of the eye (and right for that matter) might be dark
 		# might require more investigating
-		if max == 0:
+		if max_coord_start is None:
 			max = intensity
 			max_coord_start = (i, int(y))
-		elif max_coord_start and intensity > max:
+		elif max == 255 and intensity == 0:
 			max = intensity
 			max_coord_start = (i, int(y))
-		elif max_coord_start and intensity < max:
+		elif max == 0 and intensity == 255:
 			# find where the peak intensity ends
 			max_coord_end = (i, int(y))
 			break
@@ -126,7 +126,10 @@ def	get_pupil_coord(landmark1, landmark2, gray):
 	new_x = int((max_coord_end[0] + max_coord_start[0]) / 2)
 	new_y = int((max_coord_end[1] + max_coord_start[1]) / 2) 
 	
-	return new_x, new_y
+	max_coord_start = (int(max_coord_start[0]), int(max_coord_start[1]))
+	max_coord_end = (int(max_coord_end[0]), int(max_coord_end[1]))
+	
+	return new_x, new_y, max_coord_start, max_coord_end
 	
 
 def get_pupil_coords(frame, gray, shape, threshold):
@@ -141,7 +144,7 @@ def get_pupil_coords(frame, gray, shape, threshold):
 
 	ret, gray = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY) # use a binary threshold to make it easier to find peak intensity?
 
-	left_x, left_y = get_pupil_coord(shape[36], shape[39], gray)
+	left_x, left_y, left_start, left_end = get_pupil_coord(shape[36], shape[39], gray)
 	
 	# using the right x and y coords, get the vertical line that crosses through this point 
 	# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
@@ -150,10 +153,12 @@ def get_pupil_coords(frame, gray, shape, threshold):
 	
 	new_left_y = estimate_vertical_loc(left_x, left_y_top + 2, left_y_bottom - 2, shape, gray)
 	
-	cv2.circle(frame, (left_x, new_left_y), 3, (255, 0, 0), -1)
+	cv2.circle(frame, (left_x, new_left_y), 1, (255, 0, 0), -1)
+	cv2.circle(frame, (left_start[0], left_start[1]), 1, (0, 0, 255), -1)
+	cv2.circle(frame, (left_end[0], left_end[1]), 1, (0, 255, 255), -1)
 	#cv2.circle(frame, (left_x, left_y), 3, (255, 0, 0), -1)
 
-	right_x, right_y = get_pupil_coord(shape[42], shape[45], gray)
+	right_x, right_y, right_start, right_end = get_pupil_coord(shape[42], shape[45], gray)
 		
 	# using the right x and y coords, get the vertical line that crosses through this point 
 	# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
@@ -161,7 +166,9 @@ def get_pupil_coords(frame, gray, shape, threshold):
 	right_y_bottom = int(shape[46][1])
 	
 	new_right_y = estimate_vertical_loc(right_x, right_y_top + 2, right_y_bottom - 2, shape, gray)
-	cv2.circle(frame, (right_x, new_right_y), 3, (255, 0, 0), -1)
+	cv2.circle(frame, (right_x, new_right_y), 1, (255, 0, 0), -1)
+	cv2.circle(frame, (right_start[0], right_start[1]), 1, (0, 0, 255), -1)
+	cv2.circle(frame, (right_end[0], right_end[1]), 1, (0, 255, 255), -1)
 
 
 while True:
@@ -271,7 +278,6 @@ while True:
 			#cv2.drawKeypoints(original, keypoints, original, (255,180,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 			
 		"""
-
 	cv2.imshow("Frame", frame)
 	key = cv2.waitKey(1) & 0xFF
 	
