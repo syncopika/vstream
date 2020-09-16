@@ -74,18 +74,23 @@ cv2.createTrackbar('threshold', 'Frame', 0, 255, func)
 def estimate_vertical_loc(x_coord, y_top, y_bottom, shape, gray):
 	
 	curr_intensity = gray[x_coord, y_top]
-	max_start_y = 0
-	max_end_y = 0
+	max_start_y = y_top
+	max_end_y = y_bottom
 	
 	for i in range(y_top, y_bottom):
 		intensity = gray[x_coord, i]
-		if intensity > (curr_intensity + 5):
+		if intensity > curr_intensity:
+			# hit the pupil area
 			curr_intensity = intensity
 			max_start_y = i
-		elif intensity < (curr_intensity - 5):
+		elif intensity < curr_intensity:
+			# hit the sclera, end of pupil
+			max_end_y = i
+			break
+		else:
 			max_end_y = i
 			
-	new_y = y_top + int((max_end_y - max_start_y) / 2)
+	new_y = int((max_end_y + max_start_y) / 2)
 	return new_y
 	
 	
@@ -97,11 +102,11 @@ def	get_pupil_coord(landmark1, landmark2, gray):
 	slope = (point2[1] - point1[1]) / (point2[0] - point1[0])
 	intercept = point1[1] - (slope * point1[0]) # y-intercept (i.e. b) from y=mx+b
 
-	start = point1[0] + 2 # use the x-coord to go from start to end 
-	end = point2[0] - 2
+	start = point1[0] # use the x-coord to go from start to end 
+	end = point2[0]
 	max = 0 # we're looking for the peak of intensity given. since we're working with binary colors, 0 == peak (black) and 255 is everything else (white) 
 	max_coord_start = None #(start, (slope * start) + intercept)
-	max_coord_end = (start, (slope * start) + intercept)
+	max_coord_end = (end, (slope * end) + intercept)
 	
 	for i in range(start, end+1):
 		y = (slope * i) + intercept
@@ -142,31 +147,31 @@ def get_pupil_coords(frame, gray, shape, threshold):
 	# also, lateral movement doesn't seem to be getting picked up. need to check the grayscaled images?
 	# but presentation/placement of the pupils look fine (they're pretty centered at least lol)
 
-	ret, gray = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY) # use a binary threshold to make it easier to find peak intensity?
+	ret, grayscale = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY) # use a binary threshold to make it easier to find peak intensity?
 
-	left_x, left_y, left_start, left_end = get_pupil_coord(shape[36], shape[39], gray)
+	left_x, left_y, left_start, left_end = get_pupil_coord(shape[36], shape[39], grayscale)
 	
 	# using the right x and y coords, get the vertical line that crosses through this point 
 	# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
 	left_y_top = int(shape[38][1])
 	left_y_bottom = int(shape[40][1]) # this is a larger num than left_y_top because going down == increasing
 	
-	new_left_y = estimate_vertical_loc(left_x, left_y_top + 2, left_y_bottom - 2, shape, gray)
+	new_left_y = estimate_vertical_loc(left_x, left_y_top + 2, left_y_bottom - 2, shape, grayscale)
 	
-	cv2.circle(frame, (left_x, new_left_y), 1, (255, 0, 0), -1)
+	cv2.circle(frame, (left_x, new_left_y), 2, (255, 0, 0), -1)
 	cv2.circle(frame, (left_start[0], left_start[1]), 1, (0, 0, 255), -1)
 	cv2.circle(frame, (left_end[0], left_end[1]), 1, (0, 255, 255), -1)
 	#cv2.circle(frame, (left_x, left_y), 3, (255, 0, 0), -1)
 
-	right_x, right_y, right_start, right_end = get_pupil_coord(shape[42], shape[45], gray)
+	right_x, right_y, right_start, right_end = get_pupil_coord(shape[42], shape[45], grayscale)
 		
 	# using the right x and y coords, get the vertical line that crosses through this point 
 	# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
 	right_y_top = int(shape[44][1])
 	right_y_bottom = int(shape[46][1])
 	
-	new_right_y = estimate_vertical_loc(right_x, right_y_top + 2, right_y_bottom - 2, shape, gray)
-	cv2.circle(frame, (right_x, new_right_y), 1, (255, 0, 0), -1)
+	new_right_y = estimate_vertical_loc(right_x, right_y_top + 2, right_y_bottom - 2, shape, grayscale)
+	cv2.circle(frame, (right_x, new_right_y), 2, (255, 0, 0), -1)
 	cv2.circle(frame, (right_start[0], right_start[1]), 1, (0, 0, 255), -1)
 	cv2.circle(frame, (right_end[0], right_end[1]), 1, (0, 255, 255), -1)
 
@@ -187,98 +192,18 @@ while True:
 		right_eye = {'minX': 0, 'maxX': 0, 'maxY': 0, 'minY': 0} 
 		index = 0
 		
+		threshold = cv2.getTrackbarPos('threshold', 'Frame')
+		ret, grayscale = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
+		
 		for (x,y) in shape:
 		
 			threshold = cv2.getTrackbarPos('threshold', 'Frame')
-			get_pupil_coords(frame, gray, shape, threshold)
+			get_pupil_coords(gray, gray, shape, threshold)
 			
 			# make a dot for the landmark coord
-			cv2.circle(frame, (x, y), 1, (0, 255, 0), -1) #BGR format
-		
-			"""
-			# get info on eyes
-			if index in [36, 39, 37, 41]:
-				# left eye coords 
-				xCoord = int(x)
-				yCoord = int(y)
-				
-				if left_eye['minX'] == 0:
-					left_eye['minX'] = xCoord
-				else:
-					left_eye['minX'] = min(xCoord, left_eye['minX'])
-				
-				if left_eye['minY'] == 0:
-					left_eye['minY'] = yCoord
-				else:
-					left_eye['minY'] = min(yCoord, left_eye['minY'])
-				
-				left_eye['maxX'] = max(xCoord, left_eye['maxX'])
-				left_eye['maxY'] = max(yCoord, left_eye['maxY'])
-				
-			elif index in [42, 45, 43, 47]:
-				# right eye coords
-				xCoord = int(x)
-				yCoord = int(y)
-				
-				if right_eye['minX'] == 0:
-					right_eye['minX'] = xCoord
-				else:
-					right_eye['minX'] = min(xCoord, right_eye['minX'])
-				
-				if right_eye['minY'] == 0:
-					right_eye['minY'] = yCoord
-				else:
-					right_eye['minY'] = min(yCoord, right_eye['minY'])
-				
-				right_eye['maxX'] = max(xCoord, right_eye['maxX'])
-				right_eye['maxY'] = max(yCoord, right_eye['maxY'])
+			cv2.circle(gray, (x, y), 1, (0, 255, 0), -1) #BGR format
 
-			index += 1
-			
-
-			# make a dot for the landmark coord
-			#cv2.circle(frame, (x, y), 3, (255, 0, 0), -1) #BGR format
-			
-		
-		# draw in pupils with eye info
-		offset = 10
-		for eye in [left_eye, right_eye]:
-			# get the region-of-interest (ROI) based on eye info
-			width = eye['maxX'] - eye['minX'] + offset
-			height = eye['maxY'] - eye['minY'] + offset
-			
-			y = eye['minY'] - int(offset/2)
-			x = eye['minX']
-			
-			#print(eye)
-			#print(f"y: {y}")
-			#print(f"x: {x}")
-			
-			# https://stackoverflow.com/questions/9084609/how-to-copy-a-image-region-using-opencv-in-python
-			roi = gray[y:(y+height), x:(x+width)]
-			cv2.rectangle(frame, (x, y), (x+width, y+height), (0,0,255), 1);
-			
-			threshold = cv2.getTrackbarPos('threshold', 'Frame')
-			
-			img = cv2.blur(roi, (4,4))
-			#img = cv2.medianBlur(roi, 7)
-			ret, img = cv2.threshold(img, threshold, 255, cv2.THRESH_BINARY)
-			
-			keypoints = eye_detector.detect(img)
-			
-			# if multiple results, just get the first one
-			for point in keypoints[:1]:
-				kx = int(point.pt[0])
-				ky = int(point.pt[1])
-				#print(point.pt[0])
-				#print(point.pt[1])
-				cv2.circle(frame, (x+kx, y+ky), 3, (255, 0, 0), -1) #BGR format
-			
-			original = frame[y:y+height, x:x+width]
-			#cv2.drawKeypoints(original, keypoints, original, (255,180,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
-			
-		"""
-	cv2.imshow("Frame", frame)
+	cv2.imshow("Frame", gray) #frame
 	key = cv2.waitKey(1) & 0xFF
 	
 	if key == ord("q"):

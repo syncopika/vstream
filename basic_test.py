@@ -59,19 +59,25 @@ class VStream(threading.Thread):
 	# https://subscription.packtpub.com/book/application_development/9781785283932/4/ch04lvl1sec44/detecting-pupils
 	# https://medium.com/@stepanfilonov/tracking-your-eyes-with-python-3952e66194a6
 	def estimate_vertical_loc(self, x_coord, y_top, y_bottom, shape, gray):
+		
 		curr_intensity = gray[x_coord, y_top]
-		max_start_y = 0
-		max_end_y = 0
+		max_start_y = y_top
+		max_end_y = y_bottom
 		
 		for i in range(y_top, y_bottom):
 			intensity = gray[x_coord, i]
 			if intensity > curr_intensity:
+				# hit the pupil area
 				curr_intensity = intensity
 				max_start_y = i
 			elif intensity < curr_intensity:
+				# hit the sclera, end of pupil
+				max_end_y = i
+				break
+			else:
 				max_end_y = i
 				
-		new_y = y_top + int((max_end_y - max_start_y) / 2)
+		new_y = int((max_end_y + max_start_y) / 2)
 		return new_y
 	
 	def	get_pupil_coord(self, landmark1, landmark2, gray):
@@ -79,28 +85,28 @@ class VStream(threading.Thread):
 		point1 = (int(landmark1[0]), int(landmark1[1]))
 		point2 = (int(landmark2[0]), int(landmark2[1]))
 		slope = (point2[1] - point1[1]) / (point2[0] - point1[0])
-		intercept = point1[1] - (slope * point1[0]) # y-intercept from y=mx+b
-		
-		start = point1[0] + 2
-		end = point2[0] - 2
-		max = 0 # we're looking for the peak of intensity given 
-		max_coord_start = (start, (slope * start) + intercept)
-		max_coord_end = (start, (slope * start) + intercept)
+		intercept = point1[1] - (slope * point1[0]) # y-intercept (i.e. b) from y=mx+b
+
+		start = point1[0] # use the x-coord to go from start to end 
+		end = point2[0]
+		max = 0 # we're looking for the peak of intensity given. since we're working with binary colors, 0 == peak (black) and 255 is everything else (white) 
+		max_coord_start = None #(start, (slope * start) + intercept)
+		max_coord_end = (end, (slope * end) + intercept)
 		
 		for i in range(start, end+1):
 			y = (slope * i) + intercept
 			intensity = gray[i, int(y)]
-			
+
 			# note that you run the risk here of miscounting the right place if 
 			# the point you start at happens to be a dark spot (i.e. the left corner of the eye (and right for that matter) might be dark
 			# might require more investigating
-			if max == 0:
+			if max_coord_start is None:
 				max = intensity
 				max_coord_start = (i, int(y))
-			elif max_coord_start and intensity > max:
+			elif max == 255 and intensity == 0:
 				max = intensity
 				max_coord_start = (i, int(y))
-			elif max_coord_start and intensity < max:
+			elif max == 0 and intensity == 255:
 				# find where the peak intensity ends
 				max_coord_end = (i, int(y))
 				break
@@ -110,7 +116,10 @@ class VStream(threading.Thread):
 		new_x = int((max_coord_end[0] + max_coord_start[0]) / 2)
 		new_y = int((max_coord_end[1] + max_coord_start[1]) / 2) 
 		
-		return new_x, new_y
+		max_coord_start = (int(max_coord_start[0]), int(max_coord_start[1]))
+		max_coord_end = (int(max_coord_end[0]), int(max_coord_end[1]))
+		
+		return new_x, new_y, max_coord_start, max_coord_end
 		
 	def get_pupil_coords(self, gray, shape, coords):
 	
@@ -127,7 +136,7 @@ class VStream(threading.Thread):
 		threshold = STATE['threshold'] # 45
 		ret, gray = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY) # use a binary threshold to make it easier to find peak intensity?
 
-		left_x, left_y = self.get_pupil_coord(shape[36], shape[39], gray)
+		left_x, left_y, left_start, left_end = self.get_pupil_coord(shape[36], shape[39], gray)
 		
 		# using the right x and y coords, get the vertical line that crosses through this point 
 		# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
@@ -140,7 +149,7 @@ class VStream(threading.Thread):
 		#cv2.circle(frame, (left_x, left_y), 3, (255, 0, 0), -1)
 		coords['pupil_coords'].append({'x': left_x, 'y': new_left_y})
 
-		right_x, right_y = self.get_pupil_coord(shape[42], shape[45], gray)
+		right_x, right_y, right_start, right_end = self.get_pupil_coord(shape[42], shape[45], gray)
 			
 		# using the right x and y coords, get the vertical line that crosses through this point 
 		# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
