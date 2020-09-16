@@ -1,5 +1,5 @@
-# vstream (work-in-progress! not much to see here for now...)
-## face tracking for 3d models in the browser with Python, Flask and Socket.IO    
+# vstream (kinda WIP, mostly experimental nonsense)
+### face tracking for 3d models in the browser with Python, Flask and Socket.IO    
     
 ![vstream demo](images/demo.gif "demo gif")   
     
