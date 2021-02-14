@@ -26,7 +26,7 @@
 	profit?
 
 	then next next step:
-	how about hand detection?
+	how about hand detection? uh no
 
 """
 
@@ -96,7 +96,6 @@ class VStream(threading.Thread):
 		return new_y
 	
 	def	get_pupil_coord(self, landmark1, landmark2, gray):
-		
 		point1 = (int(landmark1[0]), int(landmark1[1]))
 		point2 = (int(landmark2[0]), int(landmark2[1]))
 		slope = (point2[1] - point1[1]) / (point2[0] - point1[0])
@@ -110,7 +109,7 @@ class VStream(threading.Thread):
 		
 		for i in range(start, end+1):
 			y = (slope * i) + intercept
-			intensity = gray[i, int(y)]
+			intensity = gray[i, int(y)] # access the pixel's intensity, which is a single value, at coordinate (i, int(y))
 			
 			# note that you run the risk here of miscounting the right place if 
 			# the point you start at happens to be a dark spot (i.e. the left corner of the eye (and right for that matter) might be dark
@@ -134,7 +133,6 @@ class VStream(threading.Thread):
 		return new_x, new_y
 		
 	def get_pupil_coords(self, gray, shape, coords):
-	
 		# gray - grayscaled image 
 		# shape - the facial landmarks 
 		# coords - the dict to store the estimated pupil coords
@@ -158,17 +156,15 @@ class VStream(threading.Thread):
 		coords['pupil_coords'].append({'x': left_x, 'y': new_left_y})
 
 		right_x, right_y = self.get_pupil_coord(shape[42], shape[45], gray)
-			
+		
 		# using the right x and y coords, get the vertical line that crosses through this point 
 		# to also estimate the approx. y value of the pupil in case it's moved vertically significantly
 		right_y_top = int(shape[44][1])
 		right_y_bottom = int(shape[46][1])
 		new_right_y = self.estimate_vertical_loc(right_x, right_y_top + 2, right_y_bottom - 2, shape, gray)
 		coords['pupil_coords'].append({'x': right_x, 'y': new_right_y})
-	
 		
 	def run(self):
-	
 		while True:
 			if self.state['send_data']:
 				frame = self.video_stream.read()
@@ -182,25 +178,10 @@ class VStream(threading.Thread):
 				
 				# get the facial landmarks of the faces
 				for face in faces:
-				
-					# can we separate the shapes in the face?
-					# https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
-					
-					# might be helpful for pupil tracking: 
-					# https://stackoverflow.com/questions/45789549/track-eye-pupil-position-with-webcam-opencv-and-python
-					# this one looks really good: https://subscription.packtpub.com/book/application_development/9781785283932/4/ch04lvl1sec44/detecting-pupils
-					
 					shape = self.predictor(gray, face)
 					shape = face_utils.shape_to_np(shape)
 					
-					# we're assuming that the head is leveled here (i.e. we can just go across via x-axis but what if the head is at an angle?)
-					# we need a left coord and a width for left and right eye 
-					# can we index shape?
-					# https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
 					self.get_pupil_coords(gray, shape, coords)
-					
-					# estimate pupil location (given by 1 coord)
-					# as as a separate field in the json output? one field for landmarks, one field for pupils
 					
 					for (x,y) in shape:
 						coords['landmark_coords'].append({'x': int(x), 'y': int(y)})

@@ -51,23 +51,7 @@
 	</body>
 
 
-	<script>
-	
-		/* notes 
-		
-			oooh this looks good: https://github.com/auduno/clmtrackr
-			this too: https://github.com/auduno/headtrackr
-		
-			potentially useful resources (mostly about morphing, but the warping step I think is really what we want):
-			https://www.cs.toronto.edu/~mangas/teaching/320/slides/CSC320T12.pdf
-			https://pdfs.semanticscholar.org/f528/d3e9ca5b8bf7e3b47aadce9f151a6467150a.pdf
-			https://www.cs.uaf.edu/~olawlor/academic/thesis/ref/chen93interpolation.pdf -> 2.2 looks very relevant
-			http://eeweb.poly.edu/~yao/EL5123/lecture12_ImageWarping.pdf
-			
-			https://stackoverflow.com/questions/28843938/three-js-how-to-create-new-morphing-geometry-if-i-have-all-necessary-buffers
-			
-		*/
-	
+	<script>	
 		const socket = io();
 		let streamPaused = false;
 		let calibrate = false;
@@ -301,7 +285,6 @@
 				newCoords.x = x;
 			}
 		}
-	
 		
 		function inRange(x1, x2, rangeLimit){
 			return (x1 <= x2 + rangeLimit) && (x1 >= x2 - rangeLimit);
@@ -314,7 +297,6 @@
 		
 		
 		//////////////////////////////////////////// three js stuff
-		
 		function getModel(modelFilePath, name){
 			console.log(modelFilePath);
 			return new Promise((resolve, reject) => {
@@ -538,7 +520,6 @@
 			let deltaVert = currDistVert - mouthVertical.baseline;
 			let deltaHorz = currDistHorz - mouthHorizontal.baseline;
 			
-
 			if(Math.abs(deltaVert) > minDeltaVert){
 				let newVal = mapping.mouth.vertical.interpolate(currDistVert);
 				avatarParts.mouth.morphTargetInfluences[0] = clamp(newVal, 0, 1);
@@ -612,7 +593,6 @@
 			
 			let currDistLeft = getDistance(landmark_data[21], landmark_data[27]);
 			let currDistRight = getDistance(landmark_data[22], landmark_data[27]);
-			
 			
 			// hmmmm https://github.com/davisking/dlib/issues/1658
 			// forget the eyebrow raising for now
@@ -699,7 +679,6 @@
 		}
 		
 		function handleRightEyeball(mapping, pupil_data, landmark_data, avatarParts){
-			
 			let rightEyeTop = landmark_data[38];
 			let rightEyeRight = landmark_data[39];
 			let rightEyePupil = pupil_data[0];

@@ -1,0 +1,20 @@
+https://www.pyimagesearch.com/2017/04/17/real-time-facial-landmark-detection-opencv-python-dlib/
+https://github.com/AKSHAYUBHAT/TensorFace/blob/master/openface/models/dlib/shape_predictor_68_face_landmarks.dat
+https://stackoverflow.com/questions/28981417/how-do-i-access-the-pixels-of-an-image-using-opencv-python
+
+# can we separate the shapes in the face?
+# https://www.pyimagesearch.com/2017/04/10/detect-eyes-nose-lips-jaw-dlib-opencv-python/
+
+# might be helpful for pupil tracking: 
+# https://stackoverflow.com/questions/45789549/track-eye-pupil-position-with-webcam-opencv-and-python
+# this one looks really good: https://subscription.packtpub.com/book/application_development/9781785283932/4/ch04lvl1sec44/detecting-pupils
+
+oooh this looks good: https://github.com/auduno/clmtrackr
+this too: https://github.com/auduno/headtrackr
+		
+potentially useful resources (mostly about morphing, but the warping step I think is really what we want):
+https://www.cs.toronto.edu/~mangas/teaching/320/slides/CSC320T12.pdf
+https://pdfs.semanticscholar.org/f528/d3e9ca5b8bf7e3b47aadce9f151a6467150a.pdf
+https://www.cs.uaf.edu/~olawlor/academic/thesis/ref/chen93interpolation.pdf -> 2.2 looks very relevant
+http://eeweb.poly.edu/~yao/EL5123/lecture12_ImageWarping.pdf
+https://stackoverflow.com/questions/28843938/three-js-how-to-create-new-morphing-geometry-if-i-have-all-necessary-buffers
