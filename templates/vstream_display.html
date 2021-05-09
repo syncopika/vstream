@@ -486,6 +486,7 @@
 		// create a function that gets the interpolated y-value given an x for a specific 
 		// range (given by x1,y1 and x2,y2)
 		// https://en.wikipedia.org/wiki/Interpolation
+		// this is useful for determining morph influence on certain 3d model targets like the mouth (when using shape keys)
 		function createInterpolation(x1, y1, x2, y2){
 			return function(newX){
 				return y1 + (newX - x1)*((y2-y1)/(x2-x1));

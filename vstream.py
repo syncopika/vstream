@@ -181,7 +181,10 @@ class VStream(threading.Thread):
 					shape = self.predictor(gray, face)
 					shape = face_utils.shape_to_np(shape)
 					
-					self.get_pupil_coords(gray, shape, coords)
+					try:
+						self.get_pupil_coords(gray, shape, coords)
+					except Error as err:
+						print("an issue occurred getting the pupil coordinates")
 					
 					for (x,y) in shape:
 						coords['landmark_coords'].append({'x': int(x), 'y': int(y)})
