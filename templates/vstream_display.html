@@ -102,27 +102,39 @@
 			for(let part in avatarParts){
 			
 				if(part === "mouth"){
-					// let's only care about the mouth corners and one top/bottom vert
-					let top = landmarkData[62];
-					let bottom = landmarkData[66];
-					let vertDist = getDistance(top, bottom);
+					// get the ratio of distance between vertices of the inner part of the lips and the outer part (for determining vertical movement)
+					// in doing so we can try to get the correct mouth movement no matter how close or far the user's face is to the camera
+					let topInner = landmarkData[62];
+					let bottomInner = landmarkData[66];
+					let vertDistInner = getDistance(topInner, bottomInner);
 
-					let leftMouthCorner = landmarkData[60];
-					let rightMouthCorner = landmarkData[64];
-					let horzDist = getDistance(leftMouthCorner, rightMouthCorner);
+					let topOuter = landmarkData[51];
+					let bottomOuter = landmarkData[57];
+					let vertDistOuter = getDistance(topOuter, bottomOuter);
 					
-					// record the distance between the bottom and top most mouth vertices
+					let vertDistRatio = vertDistInner / vertDistOuter; // we're assuming at baseline the mouth is closed! so at this ratio, morph influence is 0.0
+
+					// do the same for the sides of the mouth (to determine horizontal movement)
+					let leftMouthCornerInner = landmarkData[60];
+					let rightMouthCornerInner = landmarkData[64];
+					let horzDistInner = getDistance(leftMouthCornerInner, rightMouthCornerInner);
+
+					let leftMouthCornerOuter = landmarkData[48];
+					let rightMouthCornerOuter = landmarkData[54];
+					let horzDistOuter = getDistance(leftMouthCornerOuter, rightMouthCornerOuter);
+					
+					
+					let horzDistRatio = horzDistInner / horzDistOuter;
+					
 					map['mouth'] = {
 						'vertical': {
-							'baseline': vertDist,
-							'previous': 0,
-							'interpolate': createInterpolation(vertDist, 0.0, vertDist*3, 1.0) // when vert dist increases, morph influence also increases
-																							   // note that the parameters here can determine the 'sensitivity' of the morph
+							//'previous': 0,
+							'interpolate': createInterpolation(vertDistRatio, 0.0, vertDistRatio*3, 1.0) // when vert dist increases, morph influence also increases
+																							   // note that the parameters here can determine the 'sensitivity' of the morph (i.e. vertDist*3 describes the distance at which the morph influence is maximum)
 						},
 						'horizontal': {
-							'baseline': horzDist,
-							'previous': 0,
-							'interpolate': createInterpolation(horzDist, 0.0, horzDist*3, 1.0)
+							//'previous': 0,
+							'interpolate': createInterpolation(horzDistRatio, 0.0, horzDistRatio*3, 1.0)
 						}
 					}
 				}
@@ -496,46 +508,47 @@
 		function handleMouthMovement(mapping, landmark_data, avatarParts){
 			let mouthVertical = mapping['mouth'].vertical;
 			let mouthHorizontal = mapping['mouth'].horizontal;
+
+			let innerMouthTop = landmark_data[62];
+			let innerMouthBottom = landmark_data[66];
+			let outerMouthTop = landmark_data[51];
+			let outerMouthBottom = landmark_data[57];
+			let currVertRatio = getDistance(innerMouthTop, innerMouthBottom) / getDistance(outerMouthTop, outerMouthBottom);
+		
+			let newValVert = mapping.mouth.vertical.interpolate(currVertRatio);
+			avatarParts.mouth.morphTargetInfluences[0] = clamp(newValVert, 0, 1);
+
+			let rightMouthCorner = landmark_data[60];
+			let leftMouthCorner = landmark_data[64];
+			let leftMouthOuter = landmark_data[48];
+			let rightMouthOuter = landmark_data[54];
+			let currHorzRatio = getDistance(rightMouthCorner, leftMouthCorner) / getDistance(leftMouthOuter, rightMouthOuter);
 			
-			// what's the delta from the last distance or the baseline distance we got when we calibrated?
-			let lastVert;
-			let lastHorz;
-			lastVert = mouthVertical.previous === 0 ? mouthVertical.baseline : mouthVertical.previous;
-			lastHorz = mouthHorizontal.previous === 0 ? mouthHorizontal.baseline : mouthHorizontal.previous;
+			let newValHorz = mapping.mouth.horizontal.interpolate(currHorzRatio);
+			avatarParts.mouth.morphTargetInfluences[2] = clamp(newValHorz, 0, 1);
 			
-			let top2d = landmark_data[62];
-			let bottom2d = landmark_data[66];
-			let rightMouthCorner = landmark_data[64];
-			let leftMouthCorner = landmark_data[60];
+			// the o-shaped mouth is a bit tricky
+			// we can check the distance between a vertex of the upper and lower lips and another vertex of the left and right mouth corners
+			// if the distance between the top lip vertex and one of the mouth corner vertices is about equal to the distance between the bottom lip
+			// vertex and one of the mouther corners, then we can assume an o shape is being formed
+			let topToCornerDist = getDistance(landmark_data[51], landmark_data[54]); // dist between top lip vertex and right mouth corner
+			let bottomToCornerDist = getDistance(landmark_data[57], landmark_data[54]);
 			
-			let currDistVert = getDistance(top2d, bottom2d);
-			let currDistHorz = getDistance(leftMouthCorner, rightMouthCorner);
+			// I think we can take advantage of general human physiology here. we only need to check one side of the mouth since we assume
+			// general symmetry of the face. also, when forming an o-shape with the mouth, the top of the mouth should always form a bell-like curve (probably?)
+			console.log(getAngle(landmark_data[64], landmark_data[54]));
+			console.log(landmark_data[64]);
+			console.log(landmark_data[51]);
+			console.log("-----------");
 			
-			// try to prevent jittering
-			if(Math.abs(currDistVert - lastVert) < 1.7){
-				return; // don't move mouth for small changes
+			if(getAngle(landmark_data[64], landmark_data[54]) > 40){//if(avatarParts.mouth.morphTargetInfluences[0] > 0.6){
+				// for forming an o-shaped mouth
+				avatarParts.mouth.morphTargetInfluences[1] = clamp(newValVert, 0, 1);
+			}else{
+				avatarParts.mouth.morphTargetInfluences[1] = 0;
 			}
 			
-			let minDeltaVert = 0.8;
-			let minDeltaHorz = 0.5;
-			let deltaVert = currDistVert - mouthVertical.baseline;
-			let deltaHorz = currDistHorz - mouthHorizontal.baseline;
-			
-			if(Math.abs(deltaVert) > minDeltaVert){
-				let newVal = mapping.mouth.vertical.interpolate(currDistVert);
-				avatarParts.mouth.morphTargetInfluences[0] = clamp(newVal, 0, 1);
-				mapping.mouth.vertical.previous = currDistVert;
-			}
-			
-			// work on moving the ends of the mouth along the x axis as well!
-			// got shape keys! this is easy. just figure out the change in distance between the 2 mouth corners. yay
-			if(Math.abs(deltaHorz) > minDeltaHorz){
-				let newVal = mapping.mouth.horizontal.interpolate(currDistHorz);
-				avatarParts.mouth.morphTargetInfluences[2] = clamp(newVal, 0, 1);
-				mapping.mouth.horizontal.previous = currDistHorz;
-			}
-			
-			// support o mouth movement (i.e. forming an o)
+			/* support o mouth movement (i.e. forming an o)
 			// make sure we have some horizontal movement and vertical movement
 			if(currDistHorz <= mouthHorizontal.baseline - 2 && avatarParts.mouth.morphTargetInfluences[0] > 0.5){
 				// let's say baseline - 5.0 === maximum o mouth influence.
@@ -547,6 +560,7 @@
 			}else{
 				avatarParts.mouth.morphTargetInfluences[1] = 0;
 			}
+			*/
 		}
 		
 		function handleEyeMovement(mapping, landmark_data, avatarParts){
@@ -621,7 +635,7 @@
 		function handleLeftEyeball(mapping, pupil_data, landmark_data, avatarParts){
 			let leftEyeTop = landmark_data[44];
 			let leftEyeRight = landmark_data[45];
-			let leftEyePupil = pupil_data[1];
+			let leftEyePupil = pupil_data[1] || {'x': 0, 'y': 0};
 			let leftEyeBottom = landmark_data[46];
 			let leftEyeLeft = landmark_data[42];
 
@@ -682,7 +696,7 @@
 		function handleRightEyeball(mapping, pupil_data, landmark_data, avatarParts){
 			let rightEyeTop = landmark_data[38];
 			let rightEyeRight = landmark_data[39];
-			let rightEyePupil = pupil_data[0];
+			let rightEyePupil = pupil_data[0] || {'x': 0, 'y': 0};
 			let rightEyeBottom = landmark_data[40];
 			let rightEyeLeft = landmark_data[36];
 			

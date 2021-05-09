@@ -183,7 +183,7 @@ class VStream(threading.Thread):
 					
 					try:
 						self.get_pupil_coords(gray, shape, coords)
-					except Error as err:
+					except:
 						print("an issue occurred getting the pupil coordinates")
 					
 					for (x,y) in shape:
