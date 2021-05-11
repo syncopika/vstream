@@ -12,6 +12,7 @@ additional requirements (need to pip install these manually):
     
 ## background:    
 Video streaming with avatars (i.e. vtubers) is a popular thing now at the time of this writing (9/2020) and I'm interested in how it works.    
+    
 Currently, my understanding is that most people use Live2D (so not really 3d models) to create the avatars and it's used with FaceRig to map real-time motions to the avatar. 
 I also read that iPhones are commonly used for face/eye tracking. So there's definitely a lot of advanced (dare I say 'mystical') hardware and 
 techniques going into just making a bunch of vertices move according to real-time movement but I wanted to have a go at trying to think of ways I could possibly arrive at the same result.
@@ -43,13 +44,13 @@ if using conda (make sure it's accessible from the command line), you can try th
 - start up a new conda environment with `conda create --name vstream --file requirements.txt`, or do `conda env list` to see what envs currently exist. 
 - if you want to use an already created environment, you can do `activate <env name>` (make sure you have/install the required libraries!). otherwise, `activate vstream`
 - install `imutils` and `dlib` via `pip install` (not really sure why but conda seems to have trouble downloading these via requirements.txt)
-- then `python vstream`
+- then `python vstream.py`
     
 ## files    
-kind of a mess right now. in /templates, algorithm_testing.html can be run as a standalone file via python -m http.server, which just loads a set of landmark coordinates 
-and lets you change individual coordinates' x and y values to see how they affect the avatar. in the root directory, basic_test.py serves a webpage that just shows real-time 
+kind of a mess right now. in `/templates`, `algorithm_testing.html` can be run as a standalone file via `python -m http.server`, which just loads a set of landmark coordinates 
+and lets you change individual coordinates' x and y values to see how they affect the avatar. in the root directory, `basic_test.py` serves a webpage that just shows real-time 
 facial landmark coordinates on a canvas. I used this to test my backend code (mainly the pupil tracking idea I had since that involves messing with some of the landmark coordinates 
-to produce new coordinates of the pupils' estimated locations). vstream.py is the actual 'product'.    
+to produce new coordinates of the pupils' estimated locations). `vstream.py` is the actual 'product'.    
 	
 ## acknowledgements
 - much thanks to Adrian Rosebrock and his tutorial: https://www.pyimagesearch.com/2017/04/17/real-time-facial-landmark-detection-opencv-python-dlib/    
