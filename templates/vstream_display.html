@@ -43,8 +43,16 @@
 			
 			<button id='calibrate'> calibrate </button>
 			<button id='toggleStream'> pause/continue </button>
+			<button id='showLandmarkCoords'>show landmark coordinates</button>
+			<button id='testMode'>test mode</button>
 			<!--<button id='toggleWireframe'> toggle wireframe </button>-->
 			<br />
+			
+			<div>
+				<h3> current landmark coords: </h3>
+				<pre id='jsonLandmarkCoords'>
+				</pre>
+			</div>
 			
 			
 		</div>
@@ -56,6 +64,8 @@
 		let streamPaused = false;
 		let calibrate = false;
 		let showWireframe = false;
+		let showLandmarkCoords = false;
+		let testMode = false;
 		
 		// maybe instead of anchor points, we just save all the points of the previous frame to compare with. :>
 		// let's use landmark coordinate number 27 and 30 (that's part of the nose)
@@ -76,6 +86,10 @@
 		document.getElementById("toggleStream").addEventListener("click", (evt) => {
 			console.log("toggling stream...");
 			toggleStream();
+		});
+		
+		document.getElementById("showLandmarkCoords").addEventListener("click", (evt) => {
+			showLandmarkCoords = !showLandmarkCoords;
 		});
 		
 
@@ -126,7 +140,6 @@
 		
 		// set the initial nose/anchor point that we can use to figure out when a rotation is happening
 		function calibrateBaseline(landmarkData, pupilData, map){
-
 			// map points from landmark coords to face meshes
 			// this mapping thing should be configurable via a json file the user can import? 
 			// 'cause models can be different
@@ -163,7 +176,7 @@
 						'vertical': {
 							// note that the parameters here can determine the 'sensitivity' of the morph (i.e. vertDist*3 describes the distance at which the morph influence is maximum)
 							// note: these max/min values don't matter too much since we clamp the resulting value anyway
-							'interpolate': createInterpolation(vertDistRatio, 0.0, vertDistRatio*3, 1.0)
+							'interpolate': createInterpolation(vertDistRatio, 0.0, vertDistRatio*4, 1.0)
 						},
 						'horizontal': {
 							// is there a way to get the min range value from the gltf?
@@ -756,12 +769,27 @@
 			
 			if(meshLoaded && landmark_data.length > 0){
 			
+				if(showLandmarkCoords){
+					document.getElementById('jsonLandmarkCoords').textContent = JSON.stringify(theData, null, 1);
+				}else{
+					document.getElementById('jsonLandmarkCoords').textContent = "";
+				}
+				
 				////////// start movement calculation stuff (i.e. determine how to rotate/translate head)
 				if(calibrate){
 					console.log("calibrating...");
 					calibrate = !calibrate;
 					prevAnchor = landmark_data[27];
 					calibrateBaseline(landmark_data, pupil_coords, mapping); // mapping defined above as empty dictionary
+				}
+				
+				if(testMode){
+					// stop stream, send landmark coords based on manual pose selection
+					toggleStream();
+					
+					// show pose options to test
+					
+					return;
 				}
 			
 				rightJawEnd = landmark_data[0];
