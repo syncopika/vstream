@@ -24,6 +24,9 @@
 			margin: 0 auto;
 			display: inline-block;
 		}
+		#testPoses{
+			display: none;
+		}
 	</style>
 	
 	<body>
@@ -48,6 +51,12 @@
 			<!--<button id='toggleWireframe'> toggle wireframe </button>-->
 			<br />
 			
+			<div id='testPoses'>
+				<select id='testPoseOptions'>
+				</select>
+				<button id='selectPose'> select pose </button>
+			</div>
+			
 			<div>
 				<h3> current landmark coords: </h3>
 				<pre id='jsonLandmarkCoords'>
@@ -66,6 +75,36 @@
 		let showWireframe = false;
 		let showLandmarkCoords = false;
 		let testMode = false;
+		
+		// filepaths to pre-made poses containing landmark coord info for testing
+		const testPoses = [
+			'../static/pose_data/initial.json',
+			'../static/pose_data/mouth-open.json',
+			'../static/pose_data/mouth-slightly-open.json',
+			'../static/pose_data/o-mouth-large.json',
+			'../static/pose_data/o-mouth-small.json',
+			'../static/pose_data/smile-closed.json',
+			'../static/pose_data/smile-open.json',
+			'../static/pose_data/smile-wide-horizontal.json',
+			'../static/pose_data/smile-wide-vertical.json',
+		];
+		const poseData = {};
+		
+		// load in the pose data
+		testPoses.forEach((filepath) => {//'../static/pose_data/initial.json'
+			const poseName = filepath.split("/")[3].split(".")[0];
+			fetch(filepath).then(res => res.json()).then(data => {
+				//console.log('getting data for pose: ' + poseName);
+				//console.log(data);
+				poseData[poseName] = data;
+				
+				// add as option to select dropdown
+				const dropdown = document.getElementById('testPoseOptions');
+				const newOption = document.createElement('option');
+				newOption.textContent = poseName;
+				dropdown.appendChild(newOption);
+			});
+		});
 		
 		// maybe instead of anchor points, we just save all the points of the previous frame to compare with. :>
 		// let's use landmark coordinate number 27 and 30 (that's part of the nose)
@@ -92,6 +131,21 @@
 			showLandmarkCoords = !showLandmarkCoords;
 		});
 		
+		document.getElementById('testMode').addEventListener("click", (evt) => {
+			if(testMode){
+				document.getElementById('testPoses').style.display = "none";
+			}else{
+				toggleStream();
+				document.getElementById('testPoses').style.display = 'block';
+			}
+			testMode = !testMode;
+		});
+		
+		document.getElementById('selectPose').addEventListener("click", (evt) => {
+			const select = document.getElementById('testPoseOptions');
+			const selectedPose = select.options[select.selectedIndex].text;
+			socket.emit("landmarkCoordinates", JSON.stringify(poseData[selectedPose]));		
+		});
 
 		function getDistance(point1, point2){
 			let xDiff = point2.x - point1.x;
@@ -781,15 +835,6 @@
 					calibrate = !calibrate;
 					prevAnchor = landmark_data[27];
 					calibrateBaseline(landmark_data, pupil_coords, mapping); // mapping defined above as empty dictionary
-				}
-				
-				if(testMode){
-					// stop stream, send landmark coords based on manual pose selection
-					toggleStream();
-					
-					// show pose options to test
-					
-					return;
 				}
 			
 				rightJawEnd = landmark_data[0];

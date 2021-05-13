@@ -232,6 +232,12 @@ def toggle_stream(data):
 	logging.info("--------------- SEND_DATA HAS BEEN TOGGLED ---------------")
 	STATE['send_data'] = (not STATE['send_data'])
 	
+# pass test data back
+# since the client-side can't emit to self, send to this sever, which will send it back to the client. yeah, kinda weird :)
+@socketio.on('landmarkCoordinates')
+def send_landmark_data(data):
+	socketio.emit('landmarkCoordinates', data)
+	
 
 """
 handle disconnect? 
