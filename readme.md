@@ -3,6 +3,9 @@
     
 ![vstream demo](images/demo.gif "demo gif")   
     
+![vstream test mode](images/testmode.png "testmode demo")    
+Above is a screenshot of test mode, where you can select pre-made poses to see how the parts of the model move in accordance to the algorithms I set up for translating landmark coordinate positions to movement.    
+    
 I'm currently using miniconda as my virtual environment on Windows 10. I used Blender for my example model avatar.    
     
 additional requirements (need to pip install these manually):    
