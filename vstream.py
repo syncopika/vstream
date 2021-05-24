@@ -167,31 +167,34 @@ class VStream(threading.Thread):
 	def run(self):
 		while True:
 			if self.state['send_data']:
-				frame = self.video_stream.read()
-				frame = imutils.resize(frame, width=400)
-				gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-				faces = self.detector(gray, 0)
-				
-				# collect all the landmark coordinates
-				# should be a list of dictionaries like [{'x': a, 'y': b},...]
-				coords = {'landmark_coords': [], 'pupil_coords': []}
-				
-				# get the facial landmarks of the faces
-				for face in faces:
-					shape = self.predictor(gray, face)
-					shape = face_utils.shape_to_np(shape)
+				try:
+					frame = self.video_stream.read()
+					frame = imutils.resize(frame, width=400)
+					gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+					faces = self.detector(gray, 0)
 					
-					try:
-						self.get_pupil_coords(gray, shape, coords)
-					except:
-						print("an issue occurred getting the pupil coordinates")
+					# collect all the landmark coordinates
+					# should be a list of dictionaries like [{'x': a, 'y': b},...]
+					coords = {'landmark_coords': [], 'pupil_coords': []}
 					
-					for (x,y) in shape:
-						coords['landmark_coords'].append({'x': int(x), 'y': int(y)})
-						cv2.circle(frame, (x, y), 1, (255, 0, 0), -1) # BGR format
-				
-				# send the coords off to the client browser!
-				self.socket.emit('landmarkCoordinates', json.dumps(coords))
+					# get the facial landmarks of the faces
+					for face in faces:
+						shape = self.predictor(gray, face)
+						shape = face_utils.shape_to_np(shape)
+						
+						try:
+							self.get_pupil_coords(gray, shape, coords)
+						except:
+							print("an issue occurred getting the pupil coordinates")
+						
+						for (x,y) in shape:
+							coords['landmark_coords'].append({'x': int(x), 'y': int(y)})
+							cv2.circle(frame, (x, y), 1, (255, 0, 0), -1) # BGR format
+					
+					# send the coords off to the client browser!
+					self.socket.emit('landmarkCoordinates', json.dumps(coords))
+				except:
+					pass
 
 		# cleanup		
 		cv2.destroyAllWindows()

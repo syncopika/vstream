@@ -229,7 +229,7 @@
 					let vertDistOuter = getDistance(topOuter, bottomOuter);
 					
 					let vertDistRatio = vertDistInner / vertDistOuter; // we're assuming at baseline the mouth is closed! so at this ratio, morph influence is 0.0
-					console.log("setting vertDistRatio: " + vertDistRatio);
+					//console.log("setting vertDistRatio: " + vertDistRatio);
 
 					// for horizontal movement, the mouth corner vertices will generally stay in the same place. so to have some useful distance that 
 					// we can use to help us figure out which way the mouth should stretch, no matter how close or far the user's face is from the camera,
@@ -242,7 +242,7 @@
 					let jawDistUpper = getDistance(leftJawUpper, rightJawUpper);
 					
 					let horzDistRatio = horzDistOuter / jawDistUpper;
-					console.log("setting horzDistRatio: " + horzDistRatio);
+					//console.log("setting horzDistRatio: " + horzDistRatio);
 					
 					map['mouth'] = {
 						'vertical': {
@@ -300,7 +300,7 @@
 				if(part === "head"){
 					// control blinking
 					
-					//handle left eye blink
+					// handle left eye blink
 					// remember, going towards a morph influence value of 1.0 (full strength) means the eye is being closed
 					// 0.0 => eyes opened
 					let topLeft = landmarkData[38];
@@ -314,7 +314,7 @@
 						'interpolate': createInterpolation(distLeft, 0.0, distLeft/2, 1.0)
 					}
 					
-					//handle right eye blink
+					// handle right eye blink
 					let topRight = landmarkData[44];
 					let bottomRight = landmarkData[46];
 					let distRight = getDistance(topRight, bottomRight);
@@ -324,6 +324,13 @@
 							'previous': 0
 						},
 						'interpolate': createInterpolation(distRight, 0.0, distRight/2, 1.0)
+					}
+					
+					map['lateralHeadRotation'] = {
+						// if ratio between noseDist and jawDist is 0, head should be rotated fully to the left. otherwise if 1, fully to the right.
+						// noseDist = dist between left jaw landmark and nose landmark. jawDist = dist between the 2 upper jaw landmarks.
+						// note that 75 and -75 are degrees!
+						'interpolate': createInterpolation(0.0, -75, 1.0, 75)
 					}
 				}
 				
@@ -794,6 +801,22 @@
 					handleEyebrowMovement(mapping, landmark_data, avatarParts);
 				}
 				
+				// for determining how the head should rotate laterally
+				// given the nose landmark and the left and right upper jaw landmarks,
+				// we can determine how much the face should be rotated about the y-axis
+				if(mapping['lateralHeadRotation']){
+					// make sure all points are level
+					let leftUpperJaw = {'x': landmark_data[0].x, 'y': landmark_data[0].y};
+					let rightUpperJaw = {'x': landmark_data[16].x, 'y': landmark_data[0].y};
+					let nose = {'x': landmark_data[30].x, 'y': landmark_data[0].y};
+					
+					let jawDist = getDistance(leftUpperJaw, rightUpperJaw);
+					let noseDist = getDistance(leftUpperJaw, nose);
+					let noseDistRatio = (noseDist / jawDist).toFixed(2);
+					let interpolateFunc = mapping['lateralHeadRotation'].interpolate;
+					let rotationDegrees = interpolateFunc(noseDistRatio);
+					console.log(`ratio: ${noseDistRatio}, rotationDegrees: ${rotationDegrees}`);
+				}
 				
 				// are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts sideways
 				if(prevAnchor){
@@ -815,7 +838,7 @@
 				
 				// are we rotating about the y-axis (axis going up/down). captures head rotation when looking left/right
 				// look at distance between nose point and jaw endpoints
-				// uh but what if the head is tilted??? we can use the jaw endpoints to help (look at their y-values?)
+				/* uh but what if the head is tilted??? we can use the jaw endpoints to help (look at their y-values?)
 				if(prevAnchor){
 					currAnchor = landmark_data[27]; // we just need one point?
 					
@@ -834,8 +857,8 @@
 							yRotateRight = true;
 						}
 					}
-				}
-					
+				}*/
+				
 				// are we rotating about the x-axis (axis going left/right). captures nodding motions.
 				// can use nose anchor point and just check y-axis?
 				if(updateAnchorPoint){
