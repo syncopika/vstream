@@ -229,7 +229,6 @@
 					let vertDistOuter = getDistance(topOuter, bottomOuter);
 					
 					let vertDistRatio = vertDistInner / vertDistOuter; // we're assuming at baseline the mouth is closed! so at this ratio, morph influence is 0.0
-					//console.log("setting vertDistRatio: " + vertDistRatio);
 
 					// for horizontal movement, the mouth corner vertices will generally stay in the same place. so to have some useful distance that 
 					// we can use to help us figure out which way the mouth should stretch, no matter how close or far the user's face is from the camera,
@@ -242,7 +241,6 @@
 					let jawDistUpper = getDistance(leftJawUpper, rightJawUpper);
 					
 					let horzDistRatio = horzDistOuter / jawDistUpper;
-					//console.log("setting horzDistRatio: " + horzDistRatio);
 					
 					map['mouth'] = {
 						'vertical': {
@@ -329,8 +327,22 @@
 					map['lateralHeadRotation'] = {
 						// if ratio between noseDist and jawDist is 0, head should be rotated fully to the left. otherwise if 1, fully to the right.
 						// noseDist = dist between left jaw landmark and nose landmark. jawDist = dist between the 2 upper jaw landmarks.
-						// note that 75 and -75 are degrees!
+						// note that 75 and -75 are degrees! we're clamping here how much the head avatar can rotate
 						'interpolate': createInterpolation(0.0, -75, 1.0, 75)
+					}
+					
+					// rotation about the x-axis (i.e. nodding motion) is something we do need to
+					// take a baseline distance ratio between the tip of the nose and the whole nose
+					let noseTop = landmarkData[27];
+					let nosePointTop = landmarkData[30];
+					let nosePointBottom = landmarkData[33];
+					
+					let fullNoseDist = getDistance(noseTop, nosePointBottom);
+					let nosePointDist = getDistance(nosePointTop, nosePointBottom);
+					let nosePointDistRatio = parseFloat((nosePointDist / fullNoseDist).toFixed(2)); // fyi, toFixed returns a string!
+					
+					map['verticalHeadRotation'] = {
+						'interpolate': createInterpolation(nosePointDistRatio-0.2, -45, nosePointDistRatio+0.2, 45)
 					}
 				}
 				
@@ -548,8 +560,7 @@
 			
 			// ok so I made this a bit confusing, sorry -__-
 			// the shape key is closeEye so the larger the morph influence value, the more closed the eye gets.
-			// so 1.0 == closed eye, 0.0 == open eye.
-			
+			// so 1.0 == closed eye, 0.0 == open eye.	
 			let leftEyeVertical = mapping['leftEyeBlink'].dist;
 			let rightEyeVertical = mapping['rightEyeBlink'].dist;
 			let lastVertLeft, lastVertRight;
@@ -731,8 +742,6 @@
 		let movingBackwards = false;
 		let zRotateLeft = false;
 		let zRotateRight = false;
-		let yRotateLeft = false;
-		let yRotateRight = false;
 		
 		let prevCoordPositions = {};
 		
@@ -778,7 +787,6 @@
 						//document.getElementById('currentAction').textContent = "moving forwards...";
 						movingForwards = true;
 					}
-					
 					// reset
 					lastJawEndptDist = currDist;
 				}
@@ -805,7 +813,7 @@
 				// given the nose landmark and the left and right upper jaw landmarks,
 				// we can determine how much the face should be rotated about the y-axis
 				if(mapping['lateralHeadRotation']){
-					// make sure all points are level
+					// make sure all points are level for better comparison
 					let leftUpperJaw = {'x': landmark_data[0].x, 'y': landmark_data[0].y};
 					let rightUpperJaw = {'x': landmark_data[16].x, 'y': landmark_data[0].y};
 					let nose = {'x': landmark_data[30].x, 'y': landmark_data[0].y};
@@ -815,14 +823,16 @@
 					let noseDistRatio = (noseDist / jawDist).toFixed(2);
 					let interpolateFunc = mapping['lateralHeadRotation'].interpolate;
 					let rotationDegrees = interpolateFunc(noseDistRatio);
-					console.log(`ratio: ${noseDistRatio}, rotationDegrees: ${rotationDegrees}`);
+					let radToRotate = (rotationDegrees * Math.PI) / 180;
+					//console.log(`ratio: ${noseDistRatio}, rotationDegrees: ${rotationDegrees}, radians: ${radToRotate}`);
+					
+					group.rotation.y = radToRotate;		
 				}
 				
-				// are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts sideways
+				/* TOFIX: are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts sideways
 				if(prevAnchor){
 					currAnchor = landmark_data[27]; // we just need one point?
 
-					//let currAnchor2 = landmark_data[30];
 					let angle = getAngle(currAnchor, prevAnchor);
 					
 					if(Math.abs(angle) > 2 && !(inRange(leftJawEnd.y, rightJawEnd.y, 3.0))){
@@ -834,41 +844,25 @@
 							zRotateLeft = true; 
 						}
 					}
-				}
-				
-				// are we rotating about the y-axis (axis going up/down). captures head rotation when looking left/right
-				// look at distance between nose point and jaw endpoints
-				/* uh but what if the head is tilted??? we can use the jaw endpoints to help (look at their y-values?)
-				if(prevAnchor){
-					currAnchor = landmark_data[27]; // we just need one point?
-					
-					// need to make sure the jaw endpoints are pretty much at the same level 
-					// and check to see that the curr anchor pt. is 
-					let diff = currAnchor.x - prevAnchor.x;
-					let turnDirection = diff > 0.0 ? "left" : "right";
-					
-					if(inRange(leftJawEnd.y, rightJawEnd.y, 1.0) && !(inRange(currAnchor.x, prevAnchor.x, 2.0))){
-						// if the curr pos of currAnchor1 is more than a certain amount away from the prev anchorPoint along the x-axis
-						// and as long as the y-coords of the jaw endpoints are pretty similar
-						updateAnchorPoint = true;
-						if(turnDirection === "left"){
-							yRotateLeft = true;
-						}else{
-							yRotateRight = true;
-						}
-					}
 				}*/
 				
-				// are we rotating about the x-axis (axis going left/right). captures nodding motions.
-				// can use nose anchor point and just check y-axis?
-				if(updateAnchorPoint){
-					prevAnchor = currAnchor;
-					updateAnchorPoint = false;
-				}
+				// rotating about the x-axis (axis going left/right). captures nodding motions.
+				if(mapping['verticalHeadRotation']){
+					let noseTop = landmark_data[27];
+					let nosePointTop = landmark_data[30];
+					let nosePointBottom = landmark_data[33];
 					
-				// are we translating the head? i.e. moving the head left/right without any rotations?
-				// just sample a few points and get the diff?
-				
+					let fullNoseDist = getDistance(noseTop, nosePointBottom);
+					let nosePointDist = getDistance(nosePointTop, nosePointBottom);
+					let nosePointDistRatio = (nosePointDist / fullNoseDist).toFixed(2);
+					let interpolateFunc = mapping['verticalHeadRotation'].interpolate;
+					let rotationDegrees = interpolateFunc(nosePointDistRatio);
+					let radToRotate = (rotationDegrees * Math.PI) / 180;
+					//console.log(`ratio: ${nosePointDistRatio}, rotationDegrees: ${rotationDegrees}, radians: ${radToRotate}`);
+					
+					group.rotation.x = -radToRotate;
+				}
+		
 				/////////// end movement calculation stuff
 						
 				// update canvas with landmark coordinates
@@ -887,35 +881,6 @@
 					movingBackwards = false;
 					camera.translateZ(1.0);
 				}*/
-				
-				/* rotate about z axis
-				if(zRotateLeft){
-					if(group.rotation.z < (Math.PI / 3)){
-						group.rotateOnWorldAxis(new THREE.Vector3(0,0,1), Math.PI / 8);
-					}
-					zRotateLeft = false;
-				}else if(zRotateRight){
-					if(group.rotation.z > (-Math.PI / 3)){
-						group.rotateOnWorldAxis(new THREE.Vector3(0,0,1), -Math.PI / 8);
-					}
-					zRotateRight = false;
-				}*/
-				
-				
-				/* rotate about y axis
-				if(yRotateLeft){
-					if(group.rotation.y < (Math.PI / 3)){
-						// clamp the rotation
-						group.rotateOnWorldAxis(new THREE.Vector3(0,1,0), Math.PI / 8);
-					}
-					yRotateLeft = false;
-				}else if(yRotateRight){
-					if(group.rotation.y > (-Math.PI / 3)){
-						group.rotateOnWorldAxis(new THREE.Vector3(0,1,0), -Math.PI / 8);
-					}
-					yRotateRight = false;
-				}
-				*/
 				
 				renderer.render(scene, camera);
 			}

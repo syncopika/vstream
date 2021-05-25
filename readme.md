@@ -3,6 +3,8 @@
     
 ![vstream demo](images/demo.gif "demo gif")   
     
+![vstream demo](images/head-rotation.gif "demo of head rotation")   
+    
 ![vstream test mode](images/testmode.png "testmode demo")    
 Above is a screenshot of test mode, where you can select pre-made poses to see how the parts of the model move in accordance to the algorithms I set up for translating landmark coordinate positions to movement.    
     
@@ -21,7 +23,7 @@ I also read that iPhones are commonly used for face/eye tracking. So there's def
 techniques going into just making a bunch of vertices move according to real-time movement but I wanted to have a go at trying to think of ways I could possibly arrive at the same result.
     
 ## current state:    
-so right now I've got blinking, eyebrow movement and mouth movement going fairly well I think. :D but also there are some things to note:      
+so right now I've got blinking, eyebrow and mouth movement and head rotation going fairly well I think. :D but also there are some things to note:      
 - I'm using shape keys to animate everything. this simplifies a ton of things (no need to worry about where an individual vertex should go)
 but also maybe limits the range of possible expressions as well. because I'm using shape keys, I also split my avatar up into separate meshes to make it easier to keep track of things but it should be 
 possible to just have one mesh I think and a bunch of shape keys. at this time, the .js code expects separate meshes though.
@@ -31,7 +33,6 @@ possible to just have one mesh I think and a bunch of shape keys. at this time, 
     
 ## things I'd like to do/have semi-done but maybe can be perfected?:
 - eye/pupil tracking
-- head rotation (something to do with mapping 2d coords to 3d?) 
 - better/different avatars
     
 One of the big questions I'm trying to solve is how can I best map landmark coordinate locations to the coordinates of a 3d model and have the model move in alignment with the user's face in real-time? Assuming I have all the landmark coordinates in the right places, how can I get my 3d model
