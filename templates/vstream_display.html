@@ -431,7 +431,7 @@
 		renderer.setSize(400, 400);	
 		el.appendChild(renderer.domElement);
 		
-		camera.position.set(0,2,25);
+		camera.position.set(0, 2, 25);
 		scene.add(camera);
 		
 		// https://discourse.threejs.org/t/solved-glb-model-is-very-dark/6258
@@ -480,31 +480,31 @@
 					// loading the meshes is not always in the same order!!!
 					if(mesh.name === "rightEye"){
 						// right eye
-						theMesh.position.set(-3.5,2,0);
+						theMesh.position.set(-3.5, 2, 1.8);
 						avatarParts.rightEye = meshGeometry; 
 					}
 					
 					if(mesh.name === "leftEye"){
 						// left eye
-						theMesh.position.set(3.5,2,0);
+						theMesh.position.set(3.5, 2, 1.8);
 						avatarParts.leftEye = meshGeometry;
 					}
 					
 					if(mesh.name === "leftEyebrow"){
 						// left eyebrow
-						theMesh.position.set(3.5,4.5,0);
+						theMesh.position.set(3.5, 4.5, 1);
 						avatarParts.leftEyebrow = meshGeometry;
 					}
 					
 					if(mesh.name === "rightEyebrow"){
 						// right eyebrow
-						theMesh.position.set(-3.5,4.5,0);
+						theMesh.position.set(-3.5, 4.5, 1);
 						avatarParts.rightEyebrow = meshGeometry;
 					}
 					
 					if(mesh.name === "mouth"){
 						// mouth
-						theMesh.position.set(0,-5,0);
+						theMesh.position.set(0, -5, 1.3);
 						avatarParts.mouth = meshGeometry;
 					}
 					
