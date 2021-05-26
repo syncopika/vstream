@@ -24,6 +24,9 @@
 			margin: 0 auto;
 			display: inline-block;
 		}
+		#testPoses{
+			display: none;
+		}
 	</style>
 	
 	<body>
@@ -43,35 +46,72 @@
 			
 			<button id='calibrate'> calibrate </button>
 			<button id='toggleStream'> pause/continue </button>
+			<button id='showLandmarkCoords'>show landmark coordinates</button>
+			<button id='testMode'>test mode</button>
 			<!--<button id='toggleWireframe'> toggle wireframe </button>-->
 			<br />
+			
+			<div id='testPoses'>
+				<select id='testPoseOptions'>
+				</select>
+				<button id='selectPose'> select pose </button>
+			</div>
+			
+			<div>
+				<h3> current landmark coords: </h3>
+				<pre id='jsonLandmarkCoords'>
+				</pre>
+			</div>
 			
 			
 		</div>
 	</body>
 
 
-	<script>
-	
-		/* notes 
-		
-			oooh this looks good: https://github.com/auduno/clmtrackr
-			this too: https://github.com/auduno/headtrackr
-		
-			potentially useful resources (mostly about morphing, but the warping step I think is really what we want):
-			https://www.cs.toronto.edu/~mangas/teaching/320/slides/CSC320T12.pdf
-			https://pdfs.semanticscholar.org/f528/d3e9ca5b8bf7e3b47aadce9f151a6467150a.pdf
-			https://www.cs.uaf.edu/~olawlor/academic/thesis/ref/chen93interpolation.pdf -> 2.2 looks very relevant
-			http://eeweb.poly.edu/~yao/EL5123/lecture12_ImageWarping.pdf
-			
-			https://stackoverflow.com/questions/28843938/three-js-how-to-create-new-morphing-geometry-if-i-have-all-necessary-buffers
-			
-		*/
-	
+	<script>	
 		const socket = io();
 		let streamPaused = false;
 		let calibrate = false;
 		let showWireframe = false;
+		let showLandmarkCoords = false;
+		let testMode = false;
+		
+		// filepaths to pre-made poses containing landmark coord info for testing
+		const testPoses = [
+			'../static/pose_data/initial.json',
+			'../static/pose_data/face-close.json',
+			'../static/pose_data/face-far.json',
+			'../static/pose_data/eyebrows-down.json',
+			'../static/pose_data/mouth-open.json',
+			'../static/pose_data/mouth-slightly-open.json',
+			'../static/pose_data/o-mouth-large.json',
+			'../static/pose_data/o-mouth-small.json',
+			'../static/pose_data/o-mouth-far.json',
+			'../static/pose_data/o-mouth-close.json',
+			'../static/pose_data/smile-closed.json',
+			'../static/pose_data/smile-open.json',
+			'../static/pose_data/smile-far.json',
+			'../static/pose_data/smile-face-close.json',
+			'../static/pose_data/smile-wide-horizontal.json',
+			'../static/pose_data/smile-wide-vertical.json',
+		];
+		const poseData = {};
+		
+		// load in the pose data
+		testPoses.forEach((filepath) => {//'../static/pose_data/initial.json'
+			const poseName = filepath.split("/")[3].split(".")[0];
+			fetch(filepath).then(res => res.json()).then(data => {
+				//console.log('getting data for pose: ' + poseName);
+				//console.log(data);
+				poseData[poseName] = data;
+				
+				// add as option to select dropdown
+				const dropdown = document.getElementById('testPoseOptions');
+				const newOption = document.createElement('option');
+				newOption.textContent = poseName;
+				dropdown.appendChild(newOption);
+			});
+		});
 		
 		// maybe instead of anchor points, we just save all the points of the previous frame to compare with. :>
 		// let's use landmark coordinate number 27 and 30 (that's part of the nose)
@@ -94,9 +134,41 @@
 			toggleStream();
 		});
 		
+		document.getElementById("showLandmarkCoords").addEventListener("click", (evt) => {
+			showLandmarkCoords = !showLandmarkCoords;
+		});
+		
+		document.getElementById('testMode').addEventListener("click", (evt) => {
+			if(testMode){
+				document.getElementById('testPoses').style.display = "none";
+			}else{
+				toggleStream();
+				document.getElementById('testPoses').style.display = 'block';
+			}
+			testMode = !testMode;
+		});
+		
+		document.getElementById('selectPose').addEventListener("click", (evt) => {
+			const select = document.getElementById('testPoseOptions');
+			const selectedPose = select.options[select.selectedIndex].text;
+			socket.emit("landmarkCoordinates", JSON.stringify(poseData[selectedPose]));		
+		});
+		
+		document.getElementById('calibrate').addEventListener('click', (evt) => {
+			calibrate = !calibrate;
+			
+			if(calibrate && testMode){
+				// send the currently selected pose via emit
+				const select = document.getElementById('testPoseOptions');
+				const selectedPose = select.options[select.selectedIndex].text;
+				socket.emit("landmarkCoordinates", JSON.stringify(poseData[selectedPose]));	
+			}
+		});
 
 		function getDistance(point1, point2){
-			return Math.sqrt(Math.pow((point2.x - point1.x),2) + Math.pow((point2.y - point1.y),2));
+			let xDiff = point2.x - point1.x;
+			let yDiff = point2.y - point1.y;
+			return Math.sqrt((xDiff * xDiff) + (yDiff * yDiff));
 		}
 		
 		// pass in 2 coordinates
@@ -108,160 +180,124 @@
 			return angle;
 		}
 		
+		// pass in x and y coords from 2d space
+		// because of how 2d canvas coordinates are (0,0 being the top left corner, no neg. coords),
+		// we need to convert so we can know where a 2d coord can get mapped to in 3d space
+		function convert2dCoords(x, y, width, height){
+			let newCoords = {};
+			if(x > width/2){
+				newCoords.x = x;
+			}
+		}
+		
+		function inRange(x1, x2, rangeLimit){
+			return (x1 <= x2 + rangeLimit) && (x1 >= x2 - rangeLimit);
+		}
+		
+		function clamp(val, min, max){
+			val = val > max ? max : val;
+			val = val < min ? min : val;
+			return val;
+		}
+		
+		// create a function that gets the interpolated y-value given an x for a specific 
+		// range (given by x1,y1 and x2,y2)
+		// https://en.wikipedia.org/wiki/Interpolation
+		// this is useful for determining morph influence on certain 3d model targets like the mouth (when using shape keys)
+		function createInterpolation(x1, y1, x2, y2){
+			return function(newX){
+				return y1 + (newX - x1)*((y2-y1)/(x2-x1));
+			}
+		}
+		
 		// set the initial nose/anchor point that we can use to figure out when a rotation is happening
 		function calibrateBaseline(landmarkData, pupilData, map){
-
 			// map points from landmark coords to face meshes
 			// this mapping thing should be configurable via a json file the user can import? 
 			// 'cause models can be different
 			// stuff like interpolation parameters should be configurable too 
 			for(let part in avatarParts){
-			
 				if(part === "mouth"){
-					// let's only care about the mouth corners and one top/bottom vert
-					let top = landmarkData[62];
-					let bottom = landmarkData[66];
-					let vertDist = getDistance(top, bottom);
+					// get the ratio of distance between vertices of the inner part of the lips and the outer part (for determining vertical movement)
+					// in doing so we can try to get the correct mouth movement no matter how close or far the user's face is to the camera
+					let topInner = landmarkData[62];
+					let bottomInner = landmarkData[66];
+					let vertDistInner = getDistance(topInner, bottomInner);
 
-					let leftMouthCorner = landmarkData[60];
-					let rightMouthCorner = landmarkData[64];
-					let horzDist = getDistance(leftMouthCorner, rightMouthCorner);
+					let topOuter = landmarkData[51];
+					let bottomOuter = landmarkData[57];
+					let vertDistOuter = getDistance(topOuter, bottomOuter);
 					
-					// record the distance between the bottom and top most mouth vertices
+					let vertDistRatio = vertDistInner / vertDistOuter; // we're assuming at baseline the mouth is closed! so at this ratio, morph influence is 0.0
+
+					// for horizontal movement, the mouth corner vertices will generally stay in the same place. so to have some useful distance that 
+					// we can use to help us figure out which way the mouth should stretch, no matter how close or far the user's face is from the camera,
+					// we can use the uppermost jaw landmark coordinates
+					let leftJawUpper = landmarkData[0];
+					let rightJawUpper = landmarkData[16];
+					let leftMouthCornerOuter = landmarkData[48];
+					let rightMouthCornerOuter = landmarkData[54];
+					let horzDistOuter = getDistance(leftMouthCornerOuter, rightMouthCornerOuter);
+					let jawDistUpper = getDistance(leftJawUpper, rightJawUpper);
+					
+					let horzDistRatio = horzDistOuter / jawDistUpper;
+					
 					map['mouth'] = {
 						'vertical': {
-							'baseline': vertDist,
-							'previous': 0,
-							'interpolate': createInterpolation(vertDist, 0.0, vertDist*3, 1.0) // when vert dist increases, morph influence also increases
-																							   // note that the parameters here can determine the 'sensitivity' of the morph
+							// note that the parameters here can determine the 'sensitivity' of the morph (i.e. vertDist*3 describes the distance at which the morph influence is maximum)
+							// note: these max/min values don't matter too much since we clamp the resulting value anyway
+							'interpolate': createInterpolation(vertDistRatio, 0.0, vertDistRatio*4, 1.0)
 						},
 						'horizontal': {
-							'baseline': horzDist,
-							'previous': 0,
-							'interpolate': createInterpolation(horzDist, 0.0, horzDist*3, 1.0)
+							// is there a way to get the min range value from the gltf?
+							'interpolate': createInterpolation(horzDistRatio-0.2, -1.0, horzDistRatio+0.2, 1.0) // as the ratio gets smaller (distance between outer mouth vertices increases), the mouth should widen
 						}
 					}
 				}
 				
 				// the actual 'left' eye when you're facing the screen
 				if(part === "leftEye"){
-					let top = landmarkData[44];
-					let right = landmarkData[45];
-					let pupil = pupilData[1];
-					let horzRightDist = getDistance(pupil, right);
-					let vertTopDist = getDistance(pupil, top);
-					
-					let bottom = landmarkData[46];
-					let left = landmarkData[42]; 
-					let horzLeftDist = getDistance(pupil, left);
-					let vertBottomDist = getDistance(pupil, bottom);
-					
-					map['leftEye'] = {
-						'horizontal': {
-							'left': {
-								'baseline': horzLeftDist,
-								'interpolate': createInterpolation(horzLeftDist, 0.0, 0.0, 1.0) // but note this is going from the center of the eye socket towards the middle of the face. (moveleft shape key)
-							},
-							'right': {
-								'baseline': horzRightDist,
-								'interpolate': createInterpolation(horzRightDist, 0.0, 0.0, 1.0)
-							}
-						},
-						'vertical': {
-							'top': {
-								'baseline': vertTopDist,
-								'interpolate': createInterpolation(pupil.y, 0.0, top.y, 1.0)
-							},
-							'bottom': {
-								'baseline': vertBottomDist,
-								'interpolate': createInterpolation(pupil.y, 0.0, bottom.y, 1.0)
-							}
-						},
-						'baselineCoords': {
-							'x': pupil.x,
-							'y': pupil.y
-						},
-						'previous': 0
-					}
+					map['leftEye'] = {};
 				}
 				
 				if(part === "rightEye"){
-					let top = landmarkData[38];
-					//let bottom = landmarkData[41];
-					let right = landmarkData[39]; // the right-most landmark of the left eye
-					let pupil = pupilData[0];
-					let horzRightDist = getDistance(pupil, right);
-					let vertTopDist = getDistance(pupil, top);
-					
-					let bottom = landmarkData[40];
-					let left = landmarkData[36]; 
-					let horzLeftDist = getDistance(pupil, left);
-					let vertBottomDist = getDistance(pupil, bottom);
-					
-					map['rightEye'] = {
-						'horizontal': {
-							'left': {
-								'baseline': horzLeftDist,
-								'interpolate': createInterpolation(horzLeftDist, 0.0, 0.0, 1.0)
-							},
-							'right': {
-								'baseline': horzRightDist,
-								'interpolate': createInterpolation(horzRightDist, 0.0, 0.0, 1.0)
-							}
-						},
-						'vertical': {
-							'top': {
-								'baseline': vertTopDist,
-								'interpolate': createInterpolation(pupil.y, 0.0, top.y, 1.0)
-							},
-							'bottom': {
-								'baseline': vertBottomDist,
-								'interpolate': createInterpolation(pupil.y, 0.0, bottom.y, 1.0)
-							}
-						},
-						'baselineCoords': {
-							'x': pupil.x,
-							'y': pupil.y
-						},
-						'previous': 0
-					}
+					map['rightEye'] = {};
 				}
 				
 				if(part === "leftEyebrow"){
-					// the eyebrow will be treated a little differently in that 
-					// I think using the rightmost coord of the left eyebrow (left when facing the screen,
-					// so the coord closest to the top of the line going down the nose)
-					// and the leftmost coord of the right eyebrow and comparing distance between the coord
-					// at the top of the nose can help
+					// try using the top of the nose landmark and the upper jaw endpoints
+					// to create distance ratios so it can scale well
 					let middle = landmarkData[27];
-					let left = landmarkData[21];
-					let dist = getDistance(left, middle);
+					let leftEyebrow = landmarkData[21];
+					let leftUpperJaw = landmarkData[0];
+					
+					let distBetweenNoseAndLeftEyebrow = getDistance(leftEyebrow, middle);
+					let distBetweenLeftJawAndNose = getDistance(middle, leftUpperJaw); // I'm using this distance as the denominator of the ratio because these landmark coordinates should largely stay in the same place so the distance should be consistent at a given scale (i.e. how close the face is to the camera)
+					let distRatio = distBetweenNoseAndLeftEyebrow / distBetweenLeftJawAndNose;
+					
 					map['leftEyebrow'] = {
-						'dist': {
-							'baseline': dist,
-							'previous': 0
-						},
-						'interpolate': createInterpolation(dist, 0.0, dist/2, 1.0) // this causes an inverse relationship between X and Y!
+						'interpolate': createInterpolation(distRatio, 0.0, distRatio/2, 1.0) // at normal/rest pose, there should be 0 morphInfluence. if the ratio gets smaller, the eyebrow should be moving closer to the middle (so smaller numerator) and so morphInfluence should increase.
 					}
 				}
 				
 				if(part === "rightEyebrow"){
 					let middle = landmarkData[27];
-					let right = landmarkData[22];
-					let dist = getDistance(right, middle);
+					let rightEyebrow = landmarkData[22];
+					let rightUpperJaw = landmarkData[16];
+
+					let distBetweenNoseAndRightEyebrow = getDistance(rightEyebrow, middle);
+					let distBetweenRightJawAndNose = getDistance(middle, rightUpperJaw);
+					let distRatio = distBetweenNoseAndRightEyebrow / distBetweenRightJawAndNose;
+					
 					map['rightEyebrow'] = {
-						'dist': {
-							'baseline': dist,
-							'previous': 0
-						},
-						'interpolate': createInterpolation(dist, 0.0, dist/2, 1.0)
+						'interpolate': createInterpolation(distRatio, 0.0, distRatio/2, 1.0)
 					}
 				}
 				
 				if(part === "head"){
 					// control blinking
 					
-					//handle left eye blink
+					// handle left eye blink
 					// remember, going towards a morph influence value of 1.0 (full strength) means the eye is being closed
 					// 0.0 => eyes opened
 					let topLeft = landmarkData[38];
@@ -275,7 +311,7 @@
 						'interpolate': createInterpolation(distLeft, 0.0, distLeft/2, 1.0)
 					}
 					
-					//handle right eye blink
+					// handle right eye blink
 					let topRight = landmarkData[44];
 					let bottomRight = landmarkData[46];
 					let distRight = getDistance(topRight, bottomRight);
@@ -286,35 +322,34 @@
 						},
 						'interpolate': createInterpolation(distRight, 0.0, distRight/2, 1.0)
 					}
+					
+					map['lateralHeadRotation'] = {
+						// if ratio between noseDist and jawDist is 0, head should be rotated fully to the left. otherwise if 1, fully to the right.
+						// noseDist = dist between left jaw landmark and nose landmark. jawDist = dist between the 2 upper jaw landmarks.
+						// note that 75 and -75 are degrees! we're clamping here how much the head avatar can rotate
+						'interpolate': createInterpolation(0.0, -75, 1.0, 75)
+					}
+					
+					// rotation about the x-axis (i.e. nodding motion) is something we do need to
+					// take a baseline distance ratio between the tip of the nose and the whole nose
+					let noseTop = landmarkData[27];
+					let nosePointTop = landmarkData[30];
+					let nosePointBottom = landmarkData[33];
+					
+					let fullNoseDist = getDistance(noseTop, nosePointBottom);
+					let nosePointDist = getDistance(nosePointTop, nosePointBottom);
+					let nosePointDistRatio = parseFloat((nosePointDist / fullNoseDist).toFixed(2)); // fyi, toFixed returns a string!
+					
+					map['verticalHeadRotation'] = {
+						'interpolate': createInterpolation(nosePointDistRatio-0.2, -45, nosePointDistRatio+0.2, 45)
+					}
 				}
 				
 			}
 
 		}
 		
-		// pass in x and y coords from 2d space
-		// because of how 2d canvas coordinates are (0,0 being the top left corner, no neg. coords),
-		// we need to convert so we can know where a 2d coord can get mapped to in 3d space
-		function convert2dCoords(x, y, width, height){
-			let newCoords = {};
-			if(x > width/2){
-				newCoords.x = x;
-			}
-		}
-	
-		
-		function inRange(x1, x2, rangeLimit){
-			return (x1 <= x2 + rangeLimit) && (x1 >= x2 - rangeLimit);
-		}
-		
-		document.getElementById('calibrate').addEventListener('click', (evt) => {
-			calibrate = !calibrate;
-		});
-		
-		
-		
 		//////////////////////////////////////////// three js stuff
-		
 		function getModel(modelFilePath, name){
 			console.log(modelFilePath);
 			return new Promise((resolve, reject) => {
@@ -322,14 +357,12 @@
 					modelFilePath,
 					function(gltf){
 						if(gltf.animations.length > 0){
-							console.log(gltf.animations);
+							//console.log(gltf.animations);
 						}
 						let seen = new Set();
 						let faceParts = [];
 						gltf.scene.traverse((child) => {
 							if(child.type === "Mesh"){
-								
-								console.log(child);
 								let material = child.material;
 								let geometry = child.geometry;
 								let obj = new THREE.Mesh(geometry, material);
@@ -342,7 +375,6 @@
 										child.parent.scale.y = child.parent.scale.y * 5;
 										child.parent.scale.z = child.parent.scale.z * 5;
 										faceParts.push(child.parent);
-										//console.log(child.parent);
 										seen.add(child.parent.name);
 									}
 								}else{
@@ -398,12 +430,10 @@
 		renderer.setSize(400, 400);	
 		el.appendChild(renderer.domElement);
 		
-		camera.position.set(0,2,25);
+		camera.position.set(0, 2, 25);
 		scene.add(camera);
 		
-		
 		// https://discourse.threejs.org/t/solved-glb-model-is-very-dark/6258
-		// should always use a hemisphere light!
 		var hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444);
 		hemiLight.position.set(0, 200, 0);
 		scene.add(hemiLight);
@@ -413,8 +443,7 @@
 		scene.add( dirLight );
 		
 		// basic_avatar_head-edit3.gltf is experimenting with a different kind of mesh setup for the eye.
-		// basic_avatar_head-edit2.gltf is the most up-to-date non-experimental
-		loadedModels.push(getModel('../static/basic_avatar_head-edit5.gltf', 'avatar'));
+		loadedModels.push(getModel('../static/basic_avatar_head-edit5-2.gltf', 'avatar'));
 
 		Promise.all(loadedModels).then((objects) => {
 			objects.forEach((meshList) => {
@@ -423,7 +452,6 @@
 				
 				// note that i'm assuming a list of meshes coming in. change this later
 				meshList.forEach((mesh) => {
-					//console.log(mesh);
 					
 					if(showWireframe){
 						var wireframe = new THREE.WireframeGeometry(mesh.geometry);
@@ -451,31 +479,31 @@
 					// loading the meshes is not always in the same order!!!
 					if(mesh.name === "rightEye"){
 						// right eye
-						theMesh.position.set(-3.5,2,0);
+						theMesh.position.set(-3.5, 2, 1.8);
 						avatarParts.rightEye = meshGeometry; 
 					}
 					
 					if(mesh.name === "leftEye"){
 						// left eye
-						theMesh.position.set(3.5,2,0);
+						theMesh.position.set(3.5, 2, 1.8);
 						avatarParts.leftEye = meshGeometry;
 					}
 					
 					if(mesh.name === "leftEyebrow"){
 						// left eyebrow
-						theMesh.position.set(3.5,4.5,0);
+						theMesh.position.set(3.5, 4.5, 1);
 						avatarParts.leftEyebrow = meshGeometry;
 					}
 					
 					if(mesh.name === "rightEyebrow"){
 						// right eyebrow
-						theMesh.position.set(-3.5,4.5,0);
+						theMesh.position.set(-3.5, 4.5, 1);
 						avatarParts.rightEyebrow = meshGeometry;
 					}
 					
 					if(mesh.name === "mouth"){
 						// mouth
-						theMesh.position.set(0,-5,0);
+						theMesh.position.set(0, -5, 1.3);
 						avatarParts.mouth = meshGeometry;
 					}
 					
@@ -495,73 +523,30 @@
 			});
 		});
 		
-		function clamp(val, min, max){
-			val = val > 1.0 ? 1.0 : val;
-			val = val < 0.0 ? 0.0 : val;
-			return val;
-		}
-		
-		// create a function that gets the interpolated y-value given an x for a specific 
-		// range (given by x1,y1 and x2,y2)
-		// https://en.wikipedia.org/wiki/Interpolation
-		function createInterpolation(x1, y1, x2, y2){
-			return function(newX){
-				return y1 + (newX - x1)*((y2-y1)/(x2-x1));
-			}
-		}
-		
 		function handleMouthMovement(mapping, landmark_data, avatarParts){
 			let mouthVertical = mapping['mouth'].vertical;
 			let mouthHorizontal = mapping['mouth'].horizontal;
-			
-			// what's the delta from the last distance or the baseline distance we got when we calibrated?
-			let lastVert;
-			let lastHorz;
-			lastVert = mouthVertical.previous === 0 ? mouthVertical.baseline : mouthVertical.previous;
-			lastHorz = mouthHorizontal.previous === 0 ? mouthHorizontal.baseline : mouthHorizontal.previous;
-			
-			let top2d = landmark_data[62];
-			let bottom2d = landmark_data[66];
-			let rightMouthCorner = landmark_data[64];
-			let leftMouthCorner = landmark_data[60];
-			
-			let currDistVert = getDistance(top2d, bottom2d);
-			let currDistHorz = getDistance(leftMouthCorner, rightMouthCorner);
-			
-			// try to prevent jittering
-			if(Math.abs(currDistVert - lastVert) < 1.7){
-				return; // don't move mouth for small changes
-			}
-			
-			let minDeltaVert = 0.8;
-			let minDeltaHorz = 0.5;
-			let deltaVert = currDistVert - mouthVertical.baseline;
-			let deltaHorz = currDistHorz - mouthHorizontal.baseline;
-			
 
-			if(Math.abs(deltaVert) > minDeltaVert){
-				let newVal = mapping.mouth.vertical.interpolate(currDistVert);
-				avatarParts.mouth.morphTargetInfluences[0] = clamp(newVal, 0, 1);
-				mapping.mouth.vertical.previous = currDistVert;
-			}
+			let innerMouthTop = landmark_data[62];
+			let innerMouthBottom = landmark_data[66];
+			let outerMouthTop = landmark_data[51];
+			let outerMouthBottom = landmark_data[57];
+			let currVertRatio = getDistance(innerMouthTop, innerMouthBottom) / getDistance(outerMouthTop, outerMouthBottom);
+			let newValVert = mapping.mouth.vertical.interpolate(currVertRatio);
+			avatarParts.mouth.morphTargetInfluences[0] = clamp(newValVert, 0, 1.0);
+
+			let rightJawUpper = landmark_data[16];
+			let leftJawUpper = landmark_data[0];
+			let leftMouthOuter = landmark_data[48];
+			let rightMouthOuter = landmark_data[54];
+			let currHorzRatio = getDistance(leftMouthOuter, rightMouthOuter) / getDistance(leftJawUpper, rightJawUpper);
+			let newValHorz = mapping.mouth.horizontal.interpolate(currHorzRatio); // remember we get a interpolated value within the arbitrary range we set earlier (so it can be negative)
+			avatarParts.mouth.morphTargetInfluences[2] = clamp(newValHorz, 0, 0.8); // I set the max value for the shape key in Blender to 0.8
 			
-			// work on moving the ends of the mouth along the x axis as well!
-			// got shape keys! this is easy. just figure out the change in distance between the 2 mouth corners. yay
-			if(Math.abs(deltaHorz) > minDeltaHorz){
-				let newVal = mapping.mouth.horizontal.interpolate(currDistHorz);
-				avatarParts.mouth.morphTargetInfluences[2] = clamp(newVal, 0, 1);
-				mapping.mouth.horizontal.previous = currDistHorz;
-			}
-			
-			// support o mouth movement (i.e. forming an o)
-			// make sure we have some horizontal movement and vertical movement
-			if(currDistHorz <= mouthHorizontal.baseline - 2 && avatarParts.mouth.morphTargetInfluences[0] > 0.5){
-				// let's say baseline - 5.0 === maximum o mouth influence.
-				// max influence == 1, no influence == 0
-				// interpolation time 
-				let max = mouthHorizontal.baseline - 3; // the distance at which the o mouth will have maximum influence
-				let currVal = Math.min(currDistHorz / max, max);
-				avatarParts.mouth.morphTargetInfluences[1] = clamp(currVal, 0, 1);
+			// use newValHorz and newValVert to determine the influence on the o-shape mouth shape key
+			if(newValHorz < -0.3){
+				// the newValHorz being less than 0 is super important. when your mouth forms an o-shape, I think generally the corners come closer together, decreasing the distance.
+				avatarParts.mouth.morphTargetInfluences[1] = clamp(Math.abs(newValHorz), 0, 0.4);
 			}else{
 				avatarParts.mouth.morphTargetInfluences[1] = 0;
 			}
@@ -574,8 +559,7 @@
 			
 			// ok so I made this a bit confusing, sorry -__-
 			// the shape key is closeEye so the larger the morph influence value, the more closed the eye gets.
-			// so 1.0 == closed eye, 0.0 == open eye.
-			
+			// so 1.0 == closed eye, 0.0 == open eye.	
 			let leftEyeVertical = mapping['leftEyeBlink'].dist;
 			let rightEyeVertical = mapping['rightEyeBlink'].dist;
 			let lastVertLeft, lastVertRight;
@@ -602,170 +586,108 @@
 			}
 		}
 		
-		function handleEyebrowMovement(mapping, landmark_data, avatarParts){		
-			let left = mapping.leftEyebrow.dist;
-			let right = mapping.rightEyebrow.dist;
-			let minDelta = 1.0;
-			
-			let leftPrev = left.previous === 0 ? left.baseline : left.previous;
-			let rightPrev = right.previous === 0 ? right.baseline : right.previous;
-			
-			let currDistLeft = getDistance(landmark_data[21], landmark_data[27]);
-			let currDistRight = getDistance(landmark_data[22], landmark_data[27]);
-			
-			
-			// hmmmm https://github.com/davisking/dlib/issues/1658
-			// forget the eyebrow raising for now
-			let deltaLeft = currDistLeft - left.baseline;
-			let deltaRight = currDistRight - right.baseline;
-			
-			// eyebrow down
-			// note that I don't think we actually need to remember the previous distance amount. just using the baseline may be enough
-			// with some interpolation. seems to work ok so far :)
-			if(Math.abs(deltaLeft) > minDelta){
-				// we need to move the eyebrow down
-				let newVal = mapping.leftEyebrow.interpolate(currDistLeft);
-				avatarParts.leftEyebrow.morphTargetInfluences[1] = clamp(newVal, 0, 1);
-				mapping.leftEyebrow.dist.previous = currDistLeft;
-			}
-			
-			if(Math.abs(deltaRight) > minDelta){
-				// we need to move the eyebrow down
-				let newVal = mapping.rightEyebrow.interpolate(currDistRight);
-				avatarParts.rightEyebrow.morphTargetInfluences[1] = clamp(newVal, 0, 1);
-				mapping.rightEyebrow.dist.previous = currDistRight;
+		function handleEyebrowMovement(mapping, landmark_data, avatarParts, side){
+			if(side === "left"){
+				let leftInterpolateFunc = mapping.leftEyebrow.interpolate;
+				
+				let middle = landmark_data[27];
+				let leftEyebrow = landmark_data[21];
+				let leftUpperJaw = landmark_data[0];
+				
+				let distBetweenNoseAndLeftEyebrow = getDistance(leftEyebrow, middle);
+				let distBetweenLeftJawAndNose = getDistance(middle, leftUpperJaw);
+				let distRatio = distBetweenNoseAndLeftEyebrow / distBetweenLeftJawAndNose;
+				
+				let morphInfluence = leftInterpolateFunc(distRatio);
+				avatarParts.leftEyebrow.morphTargetInfluences[1] = morphInfluence;
+			}else{
+				let rightInterpolateFunc = mapping.rightEyebrow.interpolate;
+				
+				let middle = landmark_data[27];
+				let rightEyebrow = landmark_data[22];
+				let rightUpperJaw = landmark_data[16];
+
+				let distBetweenNoseAndRightEyebrow = getDistance(rightEyebrow, middle);
+				let distBetweenRightJawAndNose = getDistance(middle, rightUpperJaw);
+				let distRatio = distBetweenNoseAndRightEyebrow / distBetweenRightJawAndNose;
+				//console.log(`distBetweenRightJawAndNose: ${distBetweenRightJawAndNose}, distBetweenNoseAndRightEyebrow: ${distBetweenNoseAndRightEyebrow}, dist ratio for right eyebrow: ${distRatio}`);
+				
+				let morphInfluence = rightInterpolateFunc(distRatio);
+				avatarParts.rightEyebrow.morphTargetInfluences[1] = morphInfluence;
 			}
 		}
 		
-		function handleLeftEyeball(mapping, pupil_data, landmark_data, avatarParts){
-			let leftEyeTop = landmark_data[44];
-			let leftEyeRight = landmark_data[45];
-			let leftEyePupil = pupil_data[1];
-			let leftEyeBottom = landmark_data[46];
-			let leftEyeLeft = landmark_data[42];
-
-			// handle left eye
-			let eyeLeftVertTopBase = mapping.leftEye.vertical.top.baseline;
-			let eyeLeftVertBottomBase = mapping.leftEye.vertical.bottom.baseline;
-			let eyeLeftHorzLeftBase = mapping.leftEye.horizontal.left.baseline;
-			let eyeLeftHorzRightBase = mapping.leftEye.horizontal.right.baseline;
-
-			let eyeLeftHorzRight = getDistance(leftEyePupil, leftEyeRight);
-			let eyeLeftHorzLeft = getDistance(leftEyePupil, leftEyeLeft);
-						
-			// handle lateral movement
-			if(mapping.leftEye.baselineCoords.x <= leftEyePupil.x){
-				// moving the pupil to the right
-				let newHorzVal = clamp(mapping.leftEye.horizontal.right.interpolate(eyeLeftHorzRight), 0.0, 1.0);				
-				avatarParts.leftEye.morphTargetInfluences[0] = 0.0;
-				avatarParts.leftEye.morphTargetInfluences[1] = newHorzVal;
-			}else if(mapping.leftEye.baselineCoords.x > leftEyePupil.x){
-				// moving the pupil to the left
-				let newHorzVal = clamp(mapping.leftEye.horizontal.left.interpolate(eyeLeftHorzLeft), 0.0, 1.0);				
-				avatarParts.leftEye.morphTargetInfluences[1] = 0.0;
-				avatarParts.leftEye.morphTargetInfluences[0] = newHorzVal;				
+		function moveEyeball(whichEye, mapping, pupil_data, landmark_data, avatarParts){
+			let eyeTop, eyeBottom, eyeLeft, eyeRight, eyePupil;
+			if(whichEye === 'left'){
+				eyeTop = landmark_data[44];
+				eyeRight = landmark_data[45];
+				eyePupil = pupil_data[1] || {'x': 0, 'y': 0};
+				eyeBottom = landmark_data[46];
+				eyeLeft = landmark_data[42];
+			}else{
+				// right eye
+				eyeTop = landmark_data[38];
+				eyeRight = landmark_data[39];
+				eyePupil = pupil_data[0] || {'x': 0, 'y': 0};
+				eyeBottom = landmark_data[40];
+				eyeLeft = landmark_data[36];
 			}
 			
-			// handle vertical movement
-			// handling vertical movement for left eye
-			let baselineVec = {
-				'x': leftEyeRight.x - mapping.leftEye.baselineCoords.x, 
-				'y': leftEyeRight.y - mapping.leftEye.baselineCoords.y
-			};
-			
-			// get current vector 
-			let currVec = {
-				'x': leftEyePupil.x - mapping.leftEye.baselineCoords.x, 
-				'y': leftEyePupil.y - mapping.leftEye.baselineCoords.y
-			};
-			
-			// cross product the vectors to know if the pupil is below or above the baseline vector
-			let crossProd = (baselineVec.x*currVec.y) - (baselineVec.y*currVec.x);
-			if(crossProd < 0){
-				//console.log("moving pupil UP! crossProd is: " + crossProd);
-				let newVertVal = clamp(mapping.leftEye.vertical.top.interpolate(leftEyePupil.y), 0.0, 1.0);
-				avatarParts.leftEye.morphTargetInfluences[3] = 0.0;
-				avatarParts.leftEye.morphTargetInfluences[2] = newVertVal;
-			}else if(crossProd === 0){
-				//console.log("no vertical movement for pupil! crossProd is: " + crossProd);
-				avatarParts.leftEye.morphTargetInfluences[3] = 0.0;
-				avatarParts.leftEye.morphTargetInfluences[2] = 0.0;
-			}else{
-				//console.log("moving pupil DOWN! crossProd is: " + crossProd);
-				let newVertVal = clamp(mapping.leftEye.vertical.bottom.interpolate(leftEyePupil.y), 0.0, 1.0);
-				avatarParts.leftEye.morphTargetInfluences[2] = 0.0;
-				avatarParts.leftEye.morphTargetInfluences[3] = newVertVal;
-			}		
-		}
-		
-		function handleRightEyeball(mapping, pupil_data, landmark_data, avatarParts){
-			
-			let rightEyeTop = landmark_data[38];
-			let rightEyeRight = landmark_data[39];
-			let rightEyePupil = pupil_data[0];
-			let rightEyeBottom = landmark_data[40];
-			let rightEyeLeft = landmark_data[36];
-			
-			// handle right eye	
-			let eyeRightVertTopBase = mapping.rightEye.vertical.top.baseline;
-			let eyeRightVertBottomBase = mapping.rightEye.vertical.bottom.baseline;
-			let eyeRightHorzLeftBase = mapping.rightEye.horizontal.left.baseline;
-			let eyeRightHorzRightBase = mapping.rightEye.horizontal.right.baseline;
+			const eyeMidpoint = {'x': (eyeRight.x + eyeLeft.x)/2, 'y': (eyeRight.y + eyeLeft.y)/2};
 
-			let eyeRightHorzRight = getDistance(rightEyePupil, rightEyeRight);
-			let eyeRightHorzLeft = getDistance(rightEyePupil, rightEyeLeft);
+			// need to know how far the pupil is from the midpoint so we can calculate the morph influence for
+			// the shape keys of the eye
+			const midptToPupilDist = getDistance(eyePupil, eyeMidpoint);
+			const eye = whichEye === "left" ? "leftEye" : "rightEye";
 			
-			let eyeRightVertBase = mapping.rightEye.vertical.baseline;
-			let eyeRightLatBase = mapping.rightEye.horizontal.baseline;
-			let eyeRightVert = getDistance(rightEyePupil, rightEyeTop);
-			let eyeRightLat = getDistance(rightEyePupil, rightEyeRight);
+			let eyeRightDist = getDistance(eyeMidpoint, eyeRight);
+			let eyeLeftDist = getDistance(eyeMidpoint, eyeLeft);			
 			
-			if(mapping.rightEye.baselineCoords.x <= rightEyePupil.x){
-				// moving the pupil to the right
-				let newHorzVal = clamp(mapping.rightEye.horizontal.right.interpolate(eyeRightHorzRight), 0.0, 1.0);				
-				avatarParts.rightEye.morphTargetInfluences[0] = 0.0;
-				avatarParts.rightEye.morphTargetInfluences[1] = newHorzVal;
-			}else if(mapping.rightEye.baselineCoords.x > rightEyePupil.x){
-				// moving the pupil to the left
-				let newHorzVal = clamp(mapping.rightEye.horizontal.left.interpolate(eyeRightHorzLeft), 0.0, 1.0);				
-				avatarParts.rightEye.morphTargetInfluences[1] = 0.0;
-				avatarParts.rightEye.morphTargetInfluences[0] = newHorzVal;				
-			}
+			// get the distance between the pupil and the left and right eye landmark coords to figure out
+			// which side the pupil is closest to
+			let pupilDistLeft = getDistance(eyePupil, eyeLeft);
+			let pupilDistRight = getDistance(eyePupil, eyeRight);
+			let closestTo = Math.min(pupilDistLeft, pupilDistRight);
+			let eyeDistRatio;
 			
-			let baselineVec = {
-				'x': rightEyeRight.x - mapping.rightEye.baselineCoords.x, 
-				'y': rightEyeRight.y - mapping.rightEye.baselineCoords.y
-			};
-			
-			// get current vector 
-			let currVecRight = {
-				'x': rightEyePupil.x - mapping.rightEye.baselineCoords.x, 
-				'y': rightEyePupil.y - mapping.rightEye.baselineCoords.y
-			};
-			
-			// cross product the vectors to know if the pupil is below or above the baseline vector
-			let crossProdRight = (baselineVec.x*currVecRight.y) - (baselineVec.y*currVecRight.x);
-			if(crossProdRight < 0){
-				//console.log("moving pupil UP! crossProd is: " + crossProd);
-				let newVertVal = clamp(mapping.rightEye.vertical.top.interpolate(rightEyePupil.y), 0.0, 1.0);
-				avatarParts.rightEye.morphTargetInfluences[3] = 0.0;
-				avatarParts.rightEye.morphTargetInfluences[2] = newVertVal;
-			}else if(crossProdRight === 0){
-				//console.log("no vertical movement for pupil! crossProd is: " + crossProd);
-				avatarParts.rightEye.morphTargetInfluences[3] = 0.0;
-				avatarParts.rightEye.morphTargetInfluences[2] = 0.0;
+			if(closestTo === pupilDistRight){
+				// eyeball is moving right
+				eyeDistRatio = midptToPupilDist / eyeRightDist;
+				avatarParts[eye].morphTargetInfluences[2] = 0.0;
+				avatarParts[eye].morphTargetInfluences[3] = clamp(eyeDistRatio, 0, 1);
 			}else{
-				//console.log("moving pupil DOWN! crossProd is: " + crossProd);
-				let newVertVal = clamp(mapping.rightEye.vertical.bottom.interpolate(rightEyePupil.y), 0.0, 1.0);
-				avatarParts.rightEye.morphTargetInfluences[2] = 0.0;
-				avatarParts.rightEye.morphTargetInfluences[3] = newVertVal;
+				eyeDistRatio = midptToPupilDist / eyeLeftDist;
+				avatarParts[eye].morphTargetInfluences[3] = 0.0;
+				avatarParts[eye].morphTargetInfluences[2] = clamp(eyeDistRatio, 0, 1);
+			}
+
+			// vertical direction
+			let eyeTopDist = getDistance(eyeMidpoint, eyeTop);
+			let eyeBottomDist = getDistance(eyeMidpoint, eyeBottom);			
+			
+			// get the distance between the pupil and the top and bottom eye landmark coords to figure out
+			// which side the pupil is closest to
+			let pupilDistTop = getDistance(eyePupil, eyeTop);
+			let pupilDistBottom = getDistance(eyePupil, eyeBottom);
+			closestTo = Math.min(pupilDistTop, pupilDistBottom);
+			
+			if(closestTo === pupilDistTop){
+				// eyeball is moving up
+				eyeDistRatio = midptToPupilDist / eyeTopDist;
+				avatarParts[eye].morphTargetInfluences[3] = 0.0;
+				avatarParts[eye].morphTargetInfluences[2] = clamp(eyeDistRatio, 0, 1);
+			}else{
+				eyeDistRatio = midptToPupilDist / eyeBottomDist;
+				avatarParts[eye].morphTargetInfluences[2] = 0.0;
+				avatarParts[eye].morphTargetInfluences[3] = clamp(eyeDistRatio, 0, 1);
 			}
 		}
 		
 		function handleEyeballMovement(mapping, landmark_data, pupil_data, avatarParts){
 			// each eyeball can move up, down, left, right
-			handleLeftEyeball(mapping, pupil_data, landmark_data, avatarParts);
-			handleRightEyeball(mapping, pupil_data, landmark_data, avatarParts);
+			moveEyeball('left', mapping, pupil_data, landmark_data, avatarParts);
+			moveEyeball('right', mapping, pupil_data, landmark_data, avatarParts);
 		}
 	
 		///////////////////////////////////////////////////////////
@@ -816,8 +738,6 @@
 		let movingBackwards = false;
 		let zRotateLeft = false;
 		let zRotateRight = false;
-		let yRotateLeft = false;
-		let yRotateRight = false;
 		
 		let prevCoordPositions = {};
 		
@@ -829,8 +749,15 @@
 			
 			if(meshLoaded && landmark_data.length > 0){
 			
+				if(showLandmarkCoords){
+					document.getElementById('jsonLandmarkCoords').textContent = JSON.stringify(theData, null, 1);
+				}else{
+					document.getElementById('jsonLandmarkCoords').textContent = "";
+				}
+				
 				////////// start movement calculation stuff (i.e. determine how to rotate/translate head)
 				if(calibrate){
+					console.log("calibrating...");
 					calibrate = !calibrate;
 					prevAnchor = landmark_data[27];
 					calibrateBaseline(landmark_data, pupil_coords, mapping); // mapping defined above as empty dictionary
@@ -856,7 +783,6 @@
 						//document.getElementById('currentAction').textContent = "moving forwards...";
 						movingForwards = true;
 					}
-					
 					// reset
 					lastJawEndptDist = currDist;
 				}
@@ -876,16 +802,34 @@
 				}
 				
 				if(mapping['leftEyebrow'] && mapping['rightEyebrow']){
-					handleEyebrowMovement(mapping, landmark_data, avatarParts);
+					handleEyebrowMovement(mapping, landmark_data, avatarParts, "left");
+					handleEyebrowMovement(mapping, landmark_data, avatarParts, "right");
 				}
 				
+				// for determining how the head should rotate laterally
+				// given the nose landmark and the left and right upper jaw landmarks,
+				// we can determine how much the face should be rotated about the y-axis
+				if(mapping['lateralHeadRotation']){
+					// make sure all points are level for better comparison
+					let leftUpperJaw = {'x': landmark_data[0].x, 'y': landmark_data[0].y};
+					let rightUpperJaw = {'x': landmark_data[16].x, 'y': landmark_data[0].y};
+					let nose = {'x': landmark_data[30].x, 'y': landmark_data[0].y};
+					
+					let jawDist = getDistance(leftUpperJaw, rightUpperJaw);
+					let noseDist = getDistance(leftUpperJaw, nose);
+					let noseDistRatio = (noseDist / jawDist).toFixed(2);
+					let interpolateFunc = mapping['lateralHeadRotation'].interpolate;
+					let rotationDegrees = interpolateFunc(noseDistRatio);
+					let radToRotate = (rotationDegrees * Math.PI) / 180;
+					//console.log(`ratio: ${noseDistRatio}, rotationDegrees: ${rotationDegrees}, radians: ${radToRotate}`);
+					
+					group.rotation.y = radToRotate;		
+				}
 				
-				// are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts sideways
+				/* TOFIX: are we rotating the head about the z-axis (the axis coming at the camera), i.e. head tilts sideways
 				if(prevAnchor){
-				
 					currAnchor = landmark_data[27]; // we just need one point?
 
-					//let currAnchor2 = landmark_data[30];
 					let angle = getAngle(currAnchor, prevAnchor);
 					
 					if(Math.abs(angle) > 2 && !(inRange(leftJawEnd.y, rightJawEnd.y, 3.0))){
@@ -897,48 +841,27 @@
 							zRotateLeft = true; 
 						}
 					}
-				}
+				}*/
 				
-				// are we rotating about the y-axis (axis going up/down). captures head rotation when looking left/right
-				// look at distance between nose point and jaw endpoints
-				// uh but what if the head is tilted??? we can use the jaw endpoints to help (look at their y-values?)
-				if(prevAnchor){
-				
-					currAnchor = landmark_data[27]; // we just need one point?
+				// rotating about the x-axis (axis going left/right). captures nodding motions.
+				if(mapping['verticalHeadRotation']){
+					let noseTop = landmark_data[27];
+					let nosePointTop = landmark_data[30];
+					let nosePointBottom = landmark_data[33];
 					
-					// need to make sure the jaw endpoints are pretty much at the same level 
-					// and check to see that the curr anchor pt. is 
-					let diff = currAnchor.x - prevAnchor.x;
-					let turnDirection = diff > 0.0 ? "left" : "right";
+					let fullNoseDist = getDistance(noseTop, nosePointBottom);
+					let nosePointDist = getDistance(nosePointTop, nosePointBottom);
+					let nosePointDistRatio = (nosePointDist / fullNoseDist).toFixed(2);
+					let interpolateFunc = mapping['verticalHeadRotation'].interpolate;
+					let rotationDegrees = interpolateFunc(nosePointDistRatio);
+					let radToRotate = (rotationDegrees * Math.PI) / 180;
+					//console.log(`ratio: ${nosePointDistRatio}, rotationDegrees: ${rotationDegrees}, radians: ${radToRotate}`);
 					
-					if(inRange(leftJawEnd.y, rightJawEnd.y, 1.0) && !(inRange(currAnchor.x, prevAnchor.x, 2.0))){
-						// if the curr pos of currAnchor1 is more than a certain amount away from the prev anchorPoint along the x-axis
-						// and as long as the y-coords of the jaw endpoints are pretty similar
-						updateAnchorPoint = true;
-						if(turnDirection === "left"){
-							yRotateLeft = true;
-						}else{
-							yRotateRight = true;
-						}
-					}
-					
+					group.rotation.x = -radToRotate;
 				}
-				
-				
-				// are we rotating about the x-axis (axis going left/right). captures nodding motions.
-				// can use nose anchor point and just check y-axis?
-				if(updateAnchorPoint){
-					prevAnchor = currAnchor;
-					updateAnchorPoint = false;
-				}
-				
-				
-				// are we translating the head? i.e. moving the head left/right without any rotations?
-				// just sample a few points and get the diff?
-				
+		
 				/////////// end movement calculation stuff
-				
-				
+						
 				// update canvas with landmark coordinates
 				let canvas = document.getElementById("display");
 				let context = canvas.getContext("2d");
@@ -955,35 +878,6 @@
 					movingBackwards = false;
 					camera.translateZ(1.0);
 				}*/
-				
-				/* rotate about z axis
-				if(zRotateLeft){
-					if(group.rotation.z < (Math.PI / 3)){
-						group.rotateOnWorldAxis(new THREE.Vector3(0,0,1), Math.PI / 8);
-					}
-					zRotateLeft = false;
-				}else if(zRotateRight){
-					if(group.rotation.z > (-Math.PI / 3)){
-						group.rotateOnWorldAxis(new THREE.Vector3(0,0,1), -Math.PI / 8);
-					}
-					zRotateRight = false;
-				}*/
-				
-				
-				/* rotate about y axis
-				if(yRotateLeft){
-					if(group.rotation.y < (Math.PI / 3)){
-						// clamp the rotation
-						group.rotateOnWorldAxis(new THREE.Vector3(0,1,0), Math.PI / 8);
-					}
-					yRotateLeft = false;
-				}else if(yRotateRight){
-					if(group.rotation.y > (-Math.PI / 3)){
-						group.rotateOnWorldAxis(new THREE.Vector3(0,1,0), -Math.PI / 8);
-					}
-					yRotateRight = false;
-				}
-				*/
 				
 				renderer.render(scene, camera);
 			}

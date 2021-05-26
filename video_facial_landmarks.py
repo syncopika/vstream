@@ -96,7 +96,6 @@ def estimate_vertical_loc(x_coord, y_top, y_bottom, shape, gray):
 	
 	
 def	get_pupil_coord(landmark1, landmark2, gray):
-	
 	point1 = (int(landmark1[0]), int(landmark1[1]))
 	point2 = (int(landmark2[0]), int(landmark2[1]))
 	slope = (point2[1] - point1[1]) / (point2[0] - point1[0])
@@ -106,27 +105,27 @@ def	get_pupil_coord(landmark1, landmark2, gray):
 	end = point2[0]
 	max = 0 # we're looking for the peak of intensity given. since we're working with binary colors, 0 == peak (black) and 255 is everything else (white) 
 	max_coord_start = None #(start, (slope * start) + intercept)
-	max_coord_end = (end, (slope * end) + intercept)
+	max_coord_end = (end, int((slope * end) + intercept))
 	
 	for i in range(start, end+1):
-		y = (slope * i) + intercept
-		intensity = gray[i, int(y)]
+		y = int((slope * i) + intercept)
+		intensity = gray[i][y] # access the pixel at coordinate (i, int(y))
 
 		# note that you run the risk here of miscounting the right place if 
 		# the point you start at happens to be a dark spot (i.e. the left corner of the eye (and right for that matter) might be dark
 		# might require more investigating
 		if max_coord_start is None:
 			max = intensity
-			max_coord_start = (i, int(y))
+			max_coord_start = (i, y)
 		elif max == 255 and intensity == 0:
 			max = intensity
-			max_coord_start = (i, int(y))
+			max_coord_start = (i, y)
 		elif max == 0 and intensity == 255:
 			# find where the peak intensity ends
-			max_coord_end = (i, int(y))
+			max_coord_end = (i, y)
 			break
 		else:
-			max_coord_end = (i, int(y))
+			max_coord_end = (i, y)
 
 	new_x = int((max_coord_end[0] + max_coord_start[0]) / 2)
 	new_y = int((max_coord_end[1] + max_coord_start[1]) / 2) 
@@ -194,12 +193,9 @@ while True:
 		
 		threshold = cv2.getTrackbarPos('threshold', 'Frame')
 		ret, grayscale = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
+		get_pupil_coords(gray, gray, shape, threshold)
 		
 		for (x,y) in shape:
-		
-			threshold = cv2.getTrackbarPos('threshold', 'Frame')
-			get_pupil_coords(gray, gray, shape, threshold)
-			
 			# make a dot for the landmark coord
 			cv2.circle(gray, (x, y), 1, (0, 255, 0), -1) #BGR format
 
