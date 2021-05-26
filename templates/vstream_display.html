@@ -265,33 +265,32 @@
 				}
 				
 				if(part === "leftEyebrow"){
-					// the eyebrow will be treated a little differently in that 
-					// I think using the rightmost coord of the left eyebrow (left when facing the screen,
-					// so the coord closest to the top of the line going down the nose)
-					// and the leftmost coord of the right eyebrow and comparing distance between the coord
-					// at the top of the nose can help
+					// try using the top of the nose landmark and the upper jaw endpoints
+					// to create distance ratios so it can scale well
 					let middle = landmarkData[27];
-					let left = landmarkData[21];
-					let dist = getDistance(left, middle);
+					let leftEyebrow = landmarkData[21];
+					let leftUpperJaw = landmarkData[0];
+					
+					let distBetweenNoseAndLeftEyebrow = getDistance(leftEyebrow, middle);
+					let distBetweenLeftJawAndNose = getDistance(middle, leftUpperJaw); // I'm using this distance as the denominator of the ratio because these landmark coordinates should largely stay in the same place so the distance should be consistent at a given scale (i.e. how close the face is to the camera)
+					let distRatio = distBetweenNoseAndLeftEyebrow / distBetweenLeftJawAndNose;
+					
 					map['leftEyebrow'] = {
-						'dist': {
-							'baseline': dist,
-							'previous': 0
-						},
-						'interpolate': createInterpolation(dist, 0.0, dist/2, 1.0) // this causes an inverse relationship between X and Y!
+						'interpolate': createInterpolation(distRatio, 0.0, distRatio/2, 1.0) // at normal/rest pose, there should be 0 morphInfluence. if the ratio gets smaller, the eyebrow should be moving closer to the middle (so smaller numerator) and so morphInfluence should increase.
 					}
 				}
 				
 				if(part === "rightEyebrow"){
 					let middle = landmarkData[27];
-					let right = landmarkData[22];
-					let dist = getDistance(right, middle);
+					let rightEyebrow = landmarkData[22];
+					let rightUpperJaw = landmarkData[16];
+
+					let distBetweenNoseAndRightEyebrow = getDistance(rightEyebrow, middle);
+					let distBetweenRightJawAndNose = getDistance(middle, rightUpperJaw);
+					let distRatio = distBetweenNoseAndRightEyebrow / distBetweenRightJawAndNose;
+					
 					map['rightEyebrow'] = {
-						'dist': {
-							'baseline': dist,
-							'previous': 0
-						},
-						'interpolate': createInterpolation(dist, 0.0, dist/2, 1.0)
+						'interpolate': createInterpolation(distRatio, 0.0, distRatio/2, 1.0)
 					}
 				}
 				
@@ -587,37 +586,34 @@
 			}
 		}
 		
-		function handleEyebrowMovement(mapping, landmark_data, avatarParts){		
-			let left = mapping.leftEyebrow.dist;
-			let right = mapping.rightEyebrow.dist;
-			let minDelta = 1.0;
-			
-			let leftPrev = left.previous === 0 ? left.baseline : left.previous;
-			let rightPrev = right.previous === 0 ? right.baseline : right.previous;
-			
-			let currDistLeft = getDistance(landmark_data[21], landmark_data[27]);
-			let currDistRight = getDistance(landmark_data[22], landmark_data[27]);
-			
-			// hmmmm https://github.com/davisking/dlib/issues/1658
-			// forget the eyebrow raising for now
-			let deltaLeft = currDistLeft - left.baseline;
-			let deltaRight = currDistRight - right.baseline;
-			
-			// eyebrow down
-			// note that I don't think we actually need to remember the previous distance amount. just using the baseline may be enough
-			// with some interpolation. seems to work ok so far :)
-			if(Math.abs(deltaLeft) > minDelta){
-				// we need to move the eyebrow down
-				let newVal = mapping.leftEyebrow.interpolate(currDistLeft);
-				avatarParts.leftEyebrow.morphTargetInfluences[1] = clamp(newVal, 0, 1);
-				mapping.leftEyebrow.dist.previous = currDistLeft;
-			}
-			
-			if(Math.abs(deltaRight) > minDelta){
-				// we need to move the eyebrow down
-				let newVal = mapping.rightEyebrow.interpolate(currDistRight);
-				avatarParts.rightEyebrow.morphTargetInfluences[1] = clamp(newVal, 0, 1);
-				mapping.rightEyebrow.dist.previous = currDistRight;
+		function handleEyebrowMovement(mapping, landmark_data, avatarParts, side){
+			if(side === "left"){
+				let leftInterpolateFunc = mapping.leftEyebrow.interpolate;
+				
+				let middle = landmark_data[27];
+				let leftEyebrow = landmark_data[21];
+				let leftUpperJaw = landmark_data[0];
+				
+				let distBetweenNoseAndLeftEyebrow = getDistance(leftEyebrow, middle);
+				let distBetweenLeftJawAndNose = getDistance(middle, leftUpperJaw);
+				let distRatio = distBetweenNoseAndLeftEyebrow / distBetweenLeftJawAndNose;
+				
+				let morphInfluence = leftInterpolateFunc(distRatio);
+				avatarParts.leftEyebrow.morphTargetInfluences[1] = morphInfluence;
+			}else{
+				let rightInterpolateFunc = mapping.rightEyebrow.interpolate;
+				
+				let middle = landmark_data[27];
+				let rightEyebrow = landmark_data[22];
+				let rightUpperJaw = landmark_data[16];
+
+				let distBetweenNoseAndRightEyebrow = getDistance(rightEyebrow, middle);
+				let distBetweenRightJawAndNose = getDistance(middle, rightUpperJaw);
+				let distRatio = distBetweenNoseAndRightEyebrow / distBetweenRightJawAndNose;
+				//console.log(`distBetweenRightJawAndNose: ${distBetweenRightJawAndNose}, distBetweenNoseAndRightEyebrow: ${distBetweenNoseAndRightEyebrow}, dist ratio for right eyebrow: ${distRatio}`);
+				
+				let morphInfluence = rightInterpolateFunc(distRatio);
+				avatarParts.rightEyebrow.morphTargetInfluences[1] = morphInfluence;
 			}
 		}
 		
@@ -806,7 +802,8 @@
 				}
 				
 				if(mapping['leftEyebrow'] && mapping['rightEyebrow']){
-					handleEyebrowMovement(mapping, landmark_data, avatarParts);
+					handleEyebrowMovement(mapping, landmark_data, avatarParts, "left");
+					handleEyebrowMovement(mapping, landmark_data, avatarParts, "right");
 				}
 				
 				// for determining how the head should rotate laterally
